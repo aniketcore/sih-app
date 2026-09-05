@@ -5,6 +5,7 @@
   "packageManager": "npm@12.0.2",
   "dependencies": {
     "@vinext/cloudflare": "latest",
+    "firebase": "^12.18.0",
     "react": "latest",
     "react-dom": "latest",
     "react-server-dom-webpack": "latest",
