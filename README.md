@@ -1,50 +1,141 @@
-# vinext app
+# SIH App — System Architecture & Developer Guide
 
-This project was created with create-vinext-app.
+`sih-app` is a lightweight, edge-native web application built with **Next.js (via `vinext`)**, deployed on **Cloudflare Workers**, backed by **Cloudflare D1 (SQLite)**, and authenticated using **Firebase Auth**.
 
-## Firebase auth
+---
 
-The Firebase web app config is defined directly in [lib/firebase.ts](lib/firebase.ts) using the values Firebase gives you in the web app setup snippet.
+## Codebase Map & File Structure
 
-The current implementation uses Firebase client auth in the browser with Google sign-in. Measurement ID is included for parity with the Firebase snippet but is optional.
+```text
+sih-app/
+├── app/
+│   ├── api/
+│   │   ├── db.ts               # Shared D1 helpers, schema auto-migration, & auth/rate-limit verification
+│   │   ├── teams/route.ts      # REST API handlers for team creation, fetching, member kicking, and team deletion
+│   │   ├── invites/route.ts    # REST API handlers for sending, listing, and accepting team invites
+│   │   └── users/route.ts      # REST API handler for auto-upserting authenticated user profiles into D1
+│   ├── login/
+│   │   └── page.tsx            # Auth view (Google Sign-In + Dev Email/Password auth form)
+│   ├── team/
+│   │   └── page.tsx            # Main team management dashboard route
+│   ├── layout.tsx              # Root HTML wrapper with Navbar component integration
+│   ├── page.tsx                # User Profile route (redirects unauthenticated users to /login)
+│   └── globals.css             # Tailwind CSS styles
+├── components/
+│   ├── navbar.tsx              # Dynamic top navigation header (hidden when logged out)
+│   ├── auth-panel.tsx          # Client auth observer & wrapper for team dashboard
+│   └── team-board.tsx         # Team creation, invite sending, member roster, & kick/leave UI
+├── lib/
+│   ├── auth.ts                 # Firebase Auth client SDK wrappers (Google popup, Email auth, auto-sync)
+│   ├── auth-policy.ts          # Email domain filter (@poornima.org allowlist) & test mode flags
+│   ├── firebase.ts             # Eager Firebase app & auth client initialization from env
+│   ├── invite-state.ts         # Shared email normalization (`trim().toLowerCase()`) & invite utilities
+│   └── team-store.ts           # Client store with HTTP fetch helpers & background polling logic
+├── tests/
+│   └── invite-lifecycle.test.mjs # Node.js unit tests for normalization and invite state rules
+├── wrangler.jsonc              # Cloudflare Workers configuration (D1 database bindings & RATE_LIMITER)
+└── worker-configuration.d.ts  # Wrangler TypeScript environment interface
+```
 
-Only accounts with emails ending in `@example.com` are allowed to stay signed in. Change the domain in [components/auth-panel.tsx](components/auth-panel.tsx) to update the allowlist.
+---
 
-## How it works
+## Core System Architecture & Workflows
 
-- The app initializes Firebase from the web app config in [lib/firebase.ts](lib/firebase.ts).
-- The sign-in UI is client-side only and lives in [components/auth-panel.tsx](components/auth-panel.tsx).
-- Auth state is read from Firebase directly in the browser; there is no server session yet.
-- The home page remains edge-friendly and mostly static, so auth does not affect the page render path.
+### 1. Authentication & User Sync Flow
+1. **Client Auth**: Managed in `lib/firebase.ts` and `lib/auth.ts`.
+2. **Domain Policy**: Restricted to `@poornima.org` domain (configurable in `lib/auth-policy.ts`).
+3. **Eager Sync (`subscribeAuth`)**: When `onAuthStateChanged` fires with a valid user, `lib/auth.ts` automatically triggers `POST /api/users` via `teamStore.syncUser()`.
+4. **Server Verification (`getVerifiedUser`)**: REST endpoints verify incoming `Authorization: Bearer <token>` against Google Identity Toolkit API (`https://identitytoolkit.googleapis.com/v1/accounts:lookup`).
 
-## Firebase checklist
+### 2. Team & Member Lifecycle
+- **Single-Team Rule**: Accounts can own at most **1 active team** (`owner_uid UNIQUE` constraint in D1).
+- **Creation**: `POST /api/teams` creates the team row and inserts the creator into `team_members` with an implicit **Admin/Leader** role (`owner_email === member.email`).
+- **Invites**:
+  - `POST /api/invites` verifies target email exists in `users`, recipient is not self, and target is not already a member or pending invitee.
+  - `PATCH /api/invites` accepts an invite, adds recipient to `team_members`, and purges pending invite records.
+- **Member Removal & Teardown**:
+  - `DELETE /api/teams?teamId={id}`: Deletes the team, member roster, and pending invites (Leader only).
+  - `DELETE /api/teams?teamId={id}&targetEmail={email}`: Kicks a member (Leader only) or leaves the team (Member only).
+  - **Idempotent Handling**: Handlers return `200 OK` gracefully if a concurrent request already deleted the team/member.
 
-1. Create a Firebase project.
-2. Register a web app and copy the config values into [lib/firebase.ts](lib/firebase.ts).
-3. Enable Email/Password in Authentication.
-4. Enable Google if you want the popup sign-in button to work.
-5. Restart the dev server after changing the config.
+---
 
-## Current scope
+## Database Architecture (Cloudflare D1 SQLite)
 
-This first auth pass is intentionally minimal. It gives you Google sign-in and sign-out. The next step, if needed, is to persist the signed-in user on the backend and gate problem submissions or queue actions.
+The schema is automatically migrated on-demand via `ensureSchema()` in `app/api/db.ts`:
 
-## Team flow
+```sql
+CREATE TABLE IF NOT EXISTS users (
+  id TEXT PRIMARY KEY,           -- Firebase UID
+  email TEXT NOT NULL UNIQUE,     -- Normalized lowercased email
+  photo_url TEXT,
+  created_at INTEGER NOT NULL
+);
 
-- Signed-in users can create one team and then send requests to other email addresses.
-- Team and invite data is stored in Firestore through the client SDK.
-- The team creator is the owner. Other users only receive requests.
+CREATE TABLE IF NOT EXISTS teams (
+  id TEXT PRIMARY KEY,           -- UUID
+  name TEXT NOT NULL,
+  owner_uid TEXT NOT NULL UNIQUE, -- Ensures 1 team per owner
+  owner_email TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
 
-## Firestore setup
+CREATE TABLE IF NOT EXISTS team_members (
+  team_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  email TEXT NOT NULL,
+  photo_url TEXT,
+  joined_at INTEGER NOT NULL,
+  PRIMARY KEY (team_id, user_id)
+);
 
-1. Enable Firestore in the Firebase console for the same project.
-2. Create collections named `teams` and `teamInvites` automatically by using the UI once.
-3. Add Firestore security rules before real use.
+CREATE TABLE IF NOT EXISTS team_invites (
+  id TEXT PRIMARY KEY,           -- UUID
+  team_id TEXT NOT NULL,
+  team_name TEXT NOT NULL,
+  from_uid TEXT NOT NULL,
+  from_email TEXT NOT NULL,
+  to_email TEXT NOT NULL,
+  status TEXT NOT NULL,          -- 'pending'
+  created_at INTEGER NOT NULL
+);
+```
 
-## Scripts
+---
 
-- `pnpm run dev` starts the vinext dev server.
-- `pnpm run build` builds the Cloudflare Worker output.
-- `pnpm run start` starts the built Worker locally with Wrangler.
-- `pnpm run deploy` deploys the Cloudflare Worker.
+## REST API Specification
 
+### Authentication
+All requests require: `Authorization: Bearer <Firebase_ID_Token>`
+
+| Route | Method | Description | Request Body / Query Params |
+|---|---|---|---|
+| `/api/teams` | `GET` | Fetch teams owned or joined by user | `?userId={uid}` |
+| `/api/teams` | `POST` | Create a new team | `{ name, ownerUid, ownerEmail }` |
+| `/api/teams` | `DELETE` | Delete team (Leader) or Remove/Leave member | `?teamId={id}[&targetEmail={email}]` |
+| `/api/invites` | `GET` | Fetch pending invites for recipient | `?email={userEmail}` |
+| `/api/invites` | `POST` | Send an invite to existing user | `{ teamId, teamName, fromUid, fromEmail, toEmail }` |
+| `/api/invites` | `PATCH` | Accept a pending invite | `{ inviteId, userId, userEmail }` |
+| `/api/users` | `POST` | Sync/Upsert user profile | `{ uid, email, photoUrl? }` |
+
+---
+
+## Edge Protection & Rate Limiting
+
+- **Rate Limiting**: Configured in `wrangler.jsonc` via Cloudflare `RATE_LIMITER` binding (`60 requests / 60s`). Checked via `checkRateLimit(request)` in `app/api/db.ts`.
+- **SQL Injection Prevention**: 100% of database calls use D1 prepared statements (`env.sih_app_db.prepare(...).bind(...)`).
+
+---
+
+## Development & Test Commands
+
+```bash
+# Start Vite / vinext dev server
+npm run dev
+
+# Run unit test suite
+node --test tests/invite-lifecycle.test.mjs
+
+# Build Cloudflare Worker production output
+npm run build
+```

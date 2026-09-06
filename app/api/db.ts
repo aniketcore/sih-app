@@ -1,0 +1,209 @@
+import { env } from "cloudflare:workers";
+import { NextRequest } from "next/server";
+import { normalizeEmail } from "@/lib/invite-state";
+
+export async function getVerifiedUser(request: NextRequest) {
+  const header = request.headers.get("authorization");
+  if (!header || !header.startsWith("Bearer ")) return null;
+
+  const token = header.slice("Bearer ".length).trim();
+  if (!token) return null;
+
+  const apiKey = process.env.VITE_FIREBASE_API_KEY ?? process.env.FIREBASE_API_KEY;
+  if (!apiKey) return null;
+
+  const response = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(apiKey)}`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ idToken: token }),
+    },
+  );
+
+  if (!response.ok) return null;
+
+  const payload = (await response.json()) as { users?: Array<{ localId?: string; email?: string; photoUrl?: string }> };
+  const user = payload.users?.[0];
+  if (!user?.localId) return null;
+
+  return {
+    uid: user.localId,
+    email: user.email ?? "",
+    photoUrl: user.photoUrl ?? null,
+  };
+}
+
+export async function checkRateLimit(request: NextRequest, identifier?: string): Promise<boolean> {
+  try {
+    const limiter = (env as any)?.RATE_LIMITER;
+    if (limiter && typeof limiter.limit === "function") {
+      const key = identifier || request.headers.get("cf-connecting-ip") || "global-client";
+      const { success } = await limiter.limit({ key });
+      return success;
+    }
+  } catch (cause) {
+    // In local Miniflare dev mode, unsafe ratelimit binding can throw internal references if not supported by local worker runner
+  }
+  return true;
+}
+
+let schemaReady: Promise<void> | null = null;
+
+export async function ensureSchema() {
+  if (schemaReady) {
+    try {
+      await schemaReady;
+      return;
+    } catch {
+      schemaReady = null;
+    }
+  }
+
+  schemaReady = (async () => {
+    try {
+      await env.sih_app_db.batch([
+        env.sih_app_db.prepare(`
+          CREATE TABLE IF NOT EXISTS users (
+            id TEXT PRIMARY KEY,
+            email TEXT NOT NULL UNIQUE,
+            name TEXT,
+            phone TEXT,
+            reg_no TEXT,
+            gender TEXT,
+            photo_url TEXT,
+            created_at INTEGER NOT NULL
+          )
+        `),
+        env.sih_app_db.prepare(`
+          CREATE TABLE IF NOT EXISTS teams (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            owner_uid TEXT NOT NULL UNIQUE,
+            owner_email TEXT NOT NULL,
+            created_at INTEGER NOT NULL
+          )
+        `),
+        env.sih_app_db.prepare(`
+          CREATE TABLE IF NOT EXISTS team_invites (
+            id TEXT PRIMARY KEY,
+            team_id TEXT NOT NULL,
+            team_name TEXT NOT NULL,
+            from_uid TEXT NOT NULL,
+            from_email TEXT NOT NULL,
+            to_email TEXT NOT NULL,
+            status TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            accepted_at INTEGER,
+            accepted_by_uid TEXT,
+            accepted_by_email TEXT
+          )
+        `),
+        env.sih_app_db.prepare(`
+          CREATE TABLE IF NOT EXISTS team_members (
+            team_id TEXT NOT NULL,
+            user_id TEXT NOT NULL,
+            email TEXT NOT NULL,
+            photo_url TEXT,
+            joined_at INTEGER NOT NULL,
+            PRIMARY KEY (team_id, user_id)
+          )
+        `),
+      ]);
+
+      try { await env.sih_app_db.prepare("ALTER TABLE users ADD COLUMN name TEXT").run(); } catch {}
+      try { await env.sih_app_db.prepare("ALTER TABLE users ADD COLUMN phone TEXT").run(); } catch {}
+      try { await env.sih_app_db.prepare("ALTER TABLE users ADD COLUMN reg_no TEXT").run(); } catch {}
+      try { await env.sih_app_db.prepare("ALTER TABLE users ADD COLUMN gender TEXT").run(); } catch {}
+      try { await env.sih_app_db.prepare("ALTER TABLE users ADD COLUMN branch TEXT").run(); } catch {}
+    } catch (cause) {
+      console.error("[DB Schema Error]", cause);
+      throw cause;
+    }
+  })();
+
+  await schemaReady;
+}
+
+export async function safeDbRun<T>(fn: () => Promise<T>, fallbackMessage = "Database operation failed"): Promise<{ data: T | null; error: string | null }> {
+  try {
+    const data = await fn();
+    return { data, error: null };
+  } catch (cause) {
+    console.error("[DB Run Error]", cause);
+    return { data: null, error: cause instanceof Error ? cause.message : fallbackMessage };
+  }
+}
+
+export async function upsertUser(input: {
+  uid: string;
+  email: string;
+  name?: string | null;
+  phone?: string | null;
+  regNo?: string | null;
+  gender?: string | null;
+  branch?: string | null;
+  photoUrl?: string | null;
+}) {
+  try {
+    const normalized = normalizeEmail(input.email);
+    await env.sih_app_db
+      .prepare(
+        `INSERT INTO users (id, email, name, phone, reg_no, gender, branch, photo_url, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(email) DO UPDATE SET
+           id = excluded.id,
+           name = COALESCE(excluded.name, users.name),
+           phone = COALESCE(excluded.phone, users.phone),
+           reg_no = COALESCE(excluded.reg_no, users.reg_no),
+           gender = COALESCE(excluded.gender, users.gender),
+           branch = COALESCE(excluded.branch, users.branch),
+           photo_url = COALESCE(excluded.photo_url, users.photo_url)`,
+      )
+      .bind(
+        input.uid,
+        normalized,
+        input.name ?? null,
+        input.phone ?? null,
+        input.regNo ?? null,
+        input.gender ?? null,
+        input.branch ?? null,
+        input.photoUrl ?? null,
+        Date.now(),
+      )
+      .run();
+  } catch (cause) {
+    console.error("[DB upsertUser Error]", cause);
+  }
+}
+
+export async function upsertTeamMember(teamId: string, userId: string, email: string, photoUrl?: string | null) {
+  try {
+    await env.sih_app_db
+      .prepare(
+        "INSERT INTO team_members (team_id, user_id, email, photo_url, joined_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(team_id, user_id) DO UPDATE SET email = excluded.email, photo_url = excluded.photo_url",
+      )
+      .bind(teamId, userId, normalizeEmail(email), photoUrl ?? null, Date.now())
+      .run();
+  } catch (cause) {
+    console.error("[DB upsertTeamMember Error]", cause);
+  }
+}
+
+export async function queryDb<T>(label: string, fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (cause: any) {
+    console.error(`❌ [D1 Query Failure at "${label}"]:`, cause?.message || cause);
+    if (cause?.stack) {
+      console.error(cause.stack);
+    }
+    throw cause;
+  }
+}
+
+export function json(data: unknown, init?: ResponseInit) {
+  return Response.json(data, init);
+}
+
+
