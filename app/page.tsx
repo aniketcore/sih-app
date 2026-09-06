@@ -31,12 +31,12 @@ export default function ProfilePage() {
     }
   }), []);
 
-  if (loading || !user) return <main className="min-h-screen bg-white p-6 text-sm text-slate-500">Loading...</main>;
+  if (loading || !user) return <main className="p-6 text-sm text-slate-500">Loading...</main>;
 
   const isProfileComplete = Boolean(profile?.isComplete);
 
   return (
-    <main className="min-h-screen bg-white p-6 text-slate-900">
+    <main className="p-6 text-slate-900">
       {!isProfileComplete ? (
         <ProfileOnboardingModal profile={profile} onComplete={checkProfile} />
       ) : null}

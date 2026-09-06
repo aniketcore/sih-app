@@ -59,10 +59,10 @@ export default function LoginPage() {
     }
   }
 
-  if (loading) return <main className="min-h-screen bg-white p-6 text-sm text-slate-500">Loading...</main>;
+  if (loading) return <main className="p-6 text-sm text-slate-500">Loading...</main>;
 
   return (
-    <main className="min-h-screen bg-white p-6 text-slate-900">
+    <main className="p-6 text-slate-900">
       <div className="mx-auto max-w-xl space-y-6">
         <h1 className="text-2xl font-bold">Poornima SIH Team Portal</h1>
         <p className="text-sm text-slate-600">
