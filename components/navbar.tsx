@@ -22,6 +22,9 @@ export function Navbar() {
           <Link className="text-slate-600 hover:text-black" href="/team">
             Team
           </Link>
+          <Link className="text-slate-600 hover:text-black" href="/admin">
+            Admin
+          </Link>
           <button
             className="text-xs text-slate-500 underline hover:text-slate-800"
             onClick={() => signOutUser()}
