@@ -9,8 +9,7 @@ export async function getVerifiedUser(request: NextRequest) {
   const token = header.slice("Bearer ".length).trim();
   if (!token) return null;
 
-  const apiKey = process.env.VITE_FIREBASE_API_KEY ?? process.env.FIREBASE_API_KEY;
-  if (!apiKey) return null;
+  const apiKey = process.env.VITE_FIREBASE_API_KEY ?? process.env.FIREBASE_API_KEY ?? "AIzaSyAW8NwxgKEdDHpUzNxRZ-y-aHuj7e44MS0";
 
   const response = await fetch(
     `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(apiKey)}`,
