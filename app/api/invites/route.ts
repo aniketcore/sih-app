@@ -269,12 +269,13 @@ export async function PATCH(request: NextRequest) {
       return json({ error: "Team is already full (maximum 6 members)" }, { status: 400 });
     }
 
-    await upsertTeamMember(invite.team_id, user.uid, user.email, user.photoUrl);
-    // Remove all pending invites sent to this user now that they've joined a team
-    await env.sih_app_db
-      .prepare("DELETE FROM team_invites WHERE to_email = ?")
-      .bind(normalizeEmail(user.email))
-      .run();
+    // Atomic D1 batch: Add member and clear pending invites in one atomic execution
+    await env.sih_app_db.batch([
+      env.sih_app_db.prepare(
+        "INSERT INTO team_members (team_id, user_id, email, photo_url, joined_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(team_id, user_id) DO UPDATE SET email = excluded.email, photo_url = excluded.photo_url",
+      ).bind(invite.team_id, user.uid, normalizeEmail(user.email), user.photoUrl ?? null, Date.now()),
+      env.sih_app_db.prepare("DELETE FROM team_invites WHERE to_email = ?").bind(normalizeEmail(user.email)),
+    ]);
 
     return json({ ok: true });
   } catch (cause) {

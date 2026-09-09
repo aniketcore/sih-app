@@ -172,12 +172,13 @@ export async function DELETE(request: NextRequest) {
         return json({ error: "Cannot kick the team leader. Delete the team instead." }, { status: 400 });
       }
 
-      const res = await env.sih_app_db
-        .prepare("DELETE FROM team_members WHERE team_id = ? AND email = ?")
-        .bind(teamId, normalizedTarget)
-        .run();
+      const res = await env.sih_app_db.batch([
+        env.sih_app_db.prepare("DELETE FROM team_members WHERE team_id = ? AND email = ?").bind(teamId, normalizedTarget),
+        env.sih_app_db.prepare("DELETE FROM team_invites WHERE team_id = ? AND (to_email = ? OR from_email = ?)").bind(teamId, normalizedTarget, normalizedTarget),
+      ]);
 
-      return json({ ok: true, action: res.meta.changes > 0 ? (isSelf ? "left" : "kicked") : "already_removed" });
+      const changes = res[0].meta.changes;
+      return json({ ok: true, action: changes > 0 ? (isSelf ? "left" : "kicked") : "already_removed" });
     }
 
     if (!isOwner) {

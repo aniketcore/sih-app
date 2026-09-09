@@ -109,7 +109,15 @@ export async function ensureSchema() {
             PRIMARY KEY (team_id, user_id)
           )
         `),
+        env.sih_app_db.prepare(`
+          CREATE TABLE IF NOT EXISTS admins (
+            email TEXT PRIMARY KEY,
+            created_at INTEGER NOT NULL
+          )
+        `),
       ]);
+
+      try { await env.sih_app_db.prepare("INSERT OR IGNORE INTO admins (email, created_at) VALUES ('2025pceacsaniket25@poornima.org', 1700000000)").run(); } catch {}
 
       try { await env.sih_app_db.prepare("ALTER TABLE users ADD COLUMN name TEXT").run(); } catch {}
       try { await env.sih_app_db.prepare("ALTER TABLE users ADD COLUMN phone TEXT").run(); } catch {}
@@ -123,6 +131,20 @@ export async function ensureSchema() {
   })();
 
   await schemaReady;
+}
+
+export async function isAdmin(email: string): Promise<boolean> {
+  try {
+    const normalized = normalizeEmail(email);
+    const result = await env.sih_app_db
+      .prepare("SELECT 1 FROM admins WHERE LOWER(email) = LOWER(?) LIMIT 1")
+      .bind(normalized)
+      .first();
+    return Boolean(result);
+  } catch (cause) {
+    console.error("[DB isAdmin Error]", cause);
+    return false;
+  }
 }
 
 export async function safeDbRun<T>(fn: () => Promise<T>, fallbackMessage = "Database operation failed"): Promise<{ data: T | null; error: string | null }> {

@@ -40,6 +40,7 @@ export type TeamStore = {
   watchInvites: (email: string, onChange: (invites: Invite[]) => void) => Unsubscribe;
   watchOutgoingInvites: (teamId: string, onChange: (invites: Invite[]) => void) => Unsubscribe;
   getUserProfile: () => Promise<UserProfile | null>;
+  getAdminOverview: () => Promise<{ users: UserProfile[]; teams: Array<Team & { createdAt: number }> } | null>;
   saveUserProfile: (input: { name: string; phone: string; regNo: string; gender: string; branch: string }) => Promise<void>;
   syncUser: (input: { uid: string; email: string; photoUrl?: string | null }) => Promise<void>;
   createTeam: (input: { name: string; ownerUid: string; ownerEmail: string }) => Promise<void>;
@@ -123,6 +124,11 @@ export const teamStore: TeamStore = {
   async getUserProfile() {
     const res = await requestJson<{ user: UserProfile | null }>("/api/users");
     return res.user;
+  },
+
+  async getAdminOverview() {
+    const res = await requestJson<{ users: UserProfile[]; teams: Array<Team & { createdAt: number }> }>("/api/admin");
+    return res;
   },
 
   async saveUserProfile(input) {
