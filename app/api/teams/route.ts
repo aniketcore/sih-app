@@ -132,6 +132,49 @@ export async function POST(request: NextRequest) {
   }
 }
 
+export async function PATCH(request: NextRequest) {
+  try {
+    await ensureSchema();
+    const user = await getVerifiedUser(request);
+
+    if (!user) {
+      return json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const body = (await request.json()) as { teamId: string; name: string };
+    const name = body.name?.trim();
+
+    if (!name) {
+      return json({ error: "Team name is required" }, { status: 400 });
+    }
+
+    if (!body.teamId) {
+      return json({ error: "Missing teamId" }, { status: 400 });
+    }
+
+    // Verify sender is the team leader
+    const team = await env.sih_app_db
+      .prepare("SELECT id, owner_uid FROM teams WHERE id = ?")
+      .bind(body.teamId)
+      .first<{ id: string; owner_uid: string }>();
+
+    if (!team || team.owner_uid !== user.uid) {
+      return json({ error: "Forbidden: Only team leader can rename the team" }, { status: 403 });
+    }
+
+    // Update team name in teams table and team_invites table atomically
+    await env.sih_app_db.batch([
+      env.sih_app_db.prepare("UPDATE teams SET name = ? WHERE id = ?").bind(name, body.teamId),
+      env.sih_app_db.prepare("UPDATE team_invites SET team_name = ? WHERE team_id = ?").bind(name, body.teamId),
+    ]);
+
+    return json({ ok: true });
+  } catch (cause) {
+    console.error("[PATCH /api/teams error]", cause);
+    return json({ error: "Failed to rename team" }, { status: 500 });
+  }
+}
+
 export async function DELETE(request: NextRequest) {
   try {
     await ensureSchema();

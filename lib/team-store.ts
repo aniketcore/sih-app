@@ -44,6 +44,7 @@ export type TeamStore = {
   saveUserProfile: (input: { name: string; phone: string; regNo: string; gender: string; branch: string }) => Promise<void>;
   syncUser: (input: { uid: string; email: string; photoUrl?: string | null }) => Promise<void>;
   createTeam: (input: { name: string; ownerUid: string; ownerEmail: string }) => Promise<void>;
+  updateTeamName: (teamId: string, name: string) => Promise<void>;
   deleteTeam: (teamId: string) => Promise<void>;
   kickMember: (teamId: string, targetEmail: string) => Promise<void>;
   createInvite: (input: { teamId: string; teamName: string; fromUid: string; fromEmail: string; toEmail: string }) => Promise<void>;
@@ -166,6 +167,16 @@ export const teamStore: TeamStore = {
         name: input.name,
         ownerUid: input.ownerUid,
         ownerEmail: input.ownerEmail,
+      }),
+    });
+  },
+
+  async updateTeamName(teamId, name) {
+    await requestJson<{ ok: true }>("/api/teams", {
+      method: "PATCH",
+      body: JSON.stringify({
+        teamId,
+        name,
       }),
     });
   },

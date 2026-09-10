@@ -29,10 +29,36 @@ export function TeamBoard({ user }: { user: User }) {
   const [status, setStatus] = useState<string | null>(null);
   const [ready, setReady] = useState({ teams: false, invites: false });
 
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editedTeamName, setEditedTeamName] = useState("");
+
   const primaryTeam = teams[0] ?? null;
   const isLeader = Boolean(
     primaryTeam && primaryTeam.ownerEmail.toLowerCase() === (user.email ?? "").toLowerCase(),
   );
+
+  async function handleRenameTeam() {
+    if (!primaryTeam) return;
+    const nextName = editedTeamName.trim();
+    if (!nextName) {
+      setError("Please enter a valid team name.");
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    setStatus(null);
+
+    try {
+      await teamStore.updateTeamName(primaryTeam.id, nextName);
+      setIsEditingName(false);
+      setStatus("Team name updated successfully.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Failed to rename team");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   useEffect(() => {
     const unsubscribeTeams = teamStore.watchOwnedTeams(user.uid, (nextTeams) => {
@@ -280,12 +306,53 @@ export function TeamBoard({ user }: { user: User }) {
           ) : (
             <div className="border border-slate-200 bg-white">
               {/* Header */}
-              <div className="flex items-center justify-between border-b border-slate-200 p-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-200 p-4 gap-2">
                 <div>
-                  <h3 className="text-base font-bold text-slate-900">{primaryTeam.name}</h3>
+                  {isEditingName ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={editedTeamName}
+                        onChange={(e) => setEditedTeamName(e.target.value)}
+                        placeholder="Enter new team name"
+                        className="border border-slate-300 px-2 py-1 text-sm outline-none focus:border-black"
+                      />
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={handleRenameTeam}
+                        className="bg-black text-white px-2.5 py-1 text-xs font-semibold hover:bg-slate-800 disabled:opacity-50"
+                      >
+                        Save
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingName(false)}
+                        className="border border-slate-300 text-slate-700 px-2.5 py-1 text-xs font-medium hover:bg-slate-50"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base font-bold text-slate-900">{primaryTeam.name}</h3>
+                      {isLeader && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditedTeamName(primaryTeam.name);
+                            setIsEditingName(true);
+                          }}
+                          className="text-xs text-slate-500 hover:text-black underline font-medium"
+                        >
+                          Rename
+                        </button>
+                      )}
+                    </div>
+                  )}
                   <p className="text-xs text-slate-500 mt-0.5">Leader: {primaryTeam.ownerEmail}</p>
                 </div>
-                <span className="text-xs font-semibold text-slate-600 border border-slate-200 px-2 py-1">
+                <span className="text-xs font-semibold text-slate-600 border border-slate-200 px-2 py-1 self-start sm:self-auto">
                   {primaryTeam.members.length} / 6 Members
                 </span>
               </div>

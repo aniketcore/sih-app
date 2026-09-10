@@ -5,6 +5,7 @@ import { subscribeAuth, signOutUser, type AuthUser } from "../lib/auth";
 import { teamStore, type UserProfile } from "../lib/team-store";
 import { TeamBoard } from "./team-board";
 import { ProfileOnboardingModal } from "./profile-modal";
+import { FirstYearWarningBanner } from "./year-warning";
 
 export function AuthPanel() {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -48,13 +49,18 @@ export function AuthPanel() {
 
   const isProfileComplete = Boolean(profile?.isComplete);
 
+  const isSenior = Boolean(user.email && !user.email.trim().toLowerCase().startsWith("2026"));
+
   return (
     <div className="space-y-4">
-      {!isProfileComplete ? (
+      <FirstYearWarningBanner email={user.email} />
+
+      {!isProfileComplete && !isSenior ? (
         <ProfileOnboardingModal profile={profile} onComplete={checkProfile} />
       ) : null}
 
-      <div className="flex items-center justify-between text-sm">
+      <div className={`space-y-4 ${!isProfileComplete || isSenior ? "pointer-events-none opacity-40 grayscale select-none" : ""}`}>
+        <div className="flex items-center justify-between text-sm">
         <span>{user.email}</span>
         <button
           className="text-xs text-slate-500 underline disabled:opacity-50"
@@ -71,6 +77,7 @@ export function AuthPanel() {
       <div className={!isProfileComplete ? "pointer-events-none opacity-40 select-none" : ""}>
         <TeamBoard user={user} />
       </div>
+    </div>
     </div>
   );
 }

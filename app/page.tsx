@@ -6,6 +6,7 @@ import { subscribeAuth, type AuthUser } from "../lib/auth";
 import { teamStore, type UserProfile } from "../lib/team-store";
 import { ProfileOnboardingModal } from "../components/profile-modal";
 import { EditProfileModal } from "../components/edit-profile-modal";
+import { FirstYearWarningBanner } from "../components/year-warning";
 
 export default function ProfilePage() {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -35,9 +36,13 @@ export default function ProfilePage() {
 
   const isProfileComplete = Boolean(profile?.isComplete);
 
+  const isSenior = Boolean(user.email && !user.email.trim().toLowerCase().startsWith("2026"));
+
   return (
     <main className="p-6 text-slate-900">
-      {!isProfileComplete ? (
+      <FirstYearWarningBanner email={user.email} />
+
+      {!isProfileComplete && !isSenior ? (
         <ProfileOnboardingModal profile={profile} onComplete={checkProfile} />
       ) : null}
 
@@ -49,7 +54,7 @@ export default function ProfilePage() {
         />
       ) : null}
 
-      <div className={`mx-auto max-w-xl space-y-4 ${!isProfileComplete ? "pointer-events-none opacity-40 select-none" : ""}`}>
+      <div className={`mx-auto max-w-xl space-y-4 ${!isProfileComplete || isSenior ? "pointer-events-none opacity-40 grayscale select-none" : ""}`}>
         <div className="flex items-center justify-between border-b border-slate-200 pb-3">
           <h1 className="text-xl font-bold">Profile</h1>
           <button
