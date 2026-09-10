@@ -1,7 +1,7 @@
 "use client";
 
-export function FirstYearWarningBanner({ email }: { email?: string | null }) {
-  if (!email) return null;
+export function FirstYearWarningBanner({ email, isAdmin }: { email?: string | null; isAdmin?: boolean }) {
+  if (!email || isAdmin) return null;
 
   const normalized = email.trim().toLowerCase();
   const isFirstYear = normalized.startsWith("2026");

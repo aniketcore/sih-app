@@ -33,6 +33,7 @@ export type UserProfile = {
   branch: string | null;
   photoUrl: string | null;
   isComplete: boolean;
+  isAdmin?: boolean;
 };
 
 export type TeamStore = {

@@ -49,11 +49,11 @@ export function AuthPanel() {
 
   const isProfileComplete = Boolean(profile?.isComplete);
 
-  const isSenior = Boolean(user.email && !user.email.trim().toLowerCase().startsWith("2026"));
+  const isSenior = Boolean(user.email && !user.email.trim().toLowerCase().startsWith("2026") && !profile?.isAdmin);
 
   return (
     <div className="space-y-4">
-      <FirstYearWarningBanner email={user.email} />
+      <FirstYearWarningBanner email={user.email} isAdmin={profile?.isAdmin} />
 
       {!isProfileComplete && !isSenior ? (
         <ProfileOnboardingModal profile={profile} onComplete={checkProfile} />

@@ -68,8 +68,8 @@ export async function GET(request: NextRequest) {
     );
 
     return json({ teams });
-  } catch (cause) {
-    console.error("[GET /api/teams error]", cause);
+  } catch (cause: any) {
+    console.error("[GET /api/teams error]", cause, cause?.cause);
     return json({ error: "Failed to fetch teams" }, { status: 500 });
   }
 }
@@ -126,8 +126,8 @@ export async function POST(request: NextRequest) {
       .run();
 
     return json({ ok: true, id: newTeamId }, { status: 201 });
-  } catch (cause) {
-    console.error("[POST /api/teams error]", cause);
+  } catch (cause: any) {
+    console.error("[POST /api/teams error]", cause, cause?.cause);
     return json({ error: "Failed to create team" }, { status: 500 });
   }
 }
@@ -169,8 +169,8 @@ export async function PATCH(request: NextRequest) {
     ]);
 
     return json({ ok: true });
-  } catch (cause) {
-    console.error("[PATCH /api/teams error]", cause);
+  } catch (cause: any) {
+    console.error("[PATCH /api/teams error]", cause, cause?.cause);
     return json({ error: "Failed to rename team" }, { status: 500 });
   }
 }
@@ -236,8 +236,8 @@ export async function DELETE(request: NextRequest) {
 
     return json({ ok: true, action: "deleted" });
 
-  } catch (cause) {
-    console.error("[DELETE /api/teams error]", cause);
+  } catch (cause: any) {
+    console.error("[DELETE /api/teams error]", cause, cause?.cause);
     return json({ error: "Failed to delete team or remove member" }, { status: 500 });
   }
 }

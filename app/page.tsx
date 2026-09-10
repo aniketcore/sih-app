@@ -36,11 +36,11 @@ export default function ProfilePage() {
 
   const isProfileComplete = Boolean(profile?.isComplete);
 
-  const isSenior = Boolean(user.email && !user.email.trim().toLowerCase().startsWith("2026"));
+  const isSenior = Boolean(user.email && !user.email.trim().toLowerCase().startsWith("2026") && !profile?.isAdmin);
 
   return (
     <main className="p-6 text-slate-900">
-      <FirstYearWarningBanner email={user.email} />
+      <FirstYearWarningBanner email={user.email} isAdmin={profile?.isAdmin} />
 
       {!isProfileComplete && !isSenior ? (
         <ProfileOnboardingModal profile={profile} onComplete={checkProfile} />

@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { NextRequest } from "next/server";
-import { ensureSchema, getVerifiedUser, json, upsertUser } from "../db";
+import { ensureSchema, getVerifiedUser, json, upsertUser, isAdmin } from "../db";
 import { normalizeEmail } from "@/lib/invite-state";
 
 export async function GET(request: NextRequest) {
@@ -12,10 +12,13 @@ export async function GET(request: NextRequest) {
       return json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const row = await env.sih_app_db
-      .prepare("SELECT id, email, name, phone, reg_no, gender, branch, photo_url FROM users WHERE id = ?")
-      .bind(user.uid)
-      .first<{ id: string; email: string; name?: string | null; phone?: string | null; reg_no?: string | null; gender?: string | null; branch?: string | null; photo_url?: string | null }>();
+    const [row, userIsAdmin] = await Promise.all([
+      env.sih_app_db
+        .prepare("SELECT id, email, name, phone, reg_no, gender, branch, photo_url FROM users WHERE id = ?")
+        .bind(user.uid)
+        .first<{ id: string; email: string; name?: string | null; phone?: string | null; reg_no?: string | null; gender?: string | null; branch?: string | null; photo_url?: string | null }>(),
+      isAdmin(user.email)
+    ]);
 
     return json({
       user: row
@@ -29,6 +32,7 @@ export async function GET(request: NextRequest) {
             branch: row.branch ?? null,
             photoUrl: row.photo_url ?? null,
             isComplete: Boolean(row.name && row.phone && row.reg_no && row.gender && row.branch),
+            isAdmin: userIsAdmin,
           }
         : null,
     });

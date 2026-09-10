@@ -48,8 +48,11 @@ export async function checkRateLimit(request: NextRequest, identifier?: string):
 }
 
 let schemaReady: Promise<void> | null = null;
+let schemaInitialized = false;
 
 export async function ensureSchema() {
+  if (schemaInitialized) return;
+
   if (schemaReady) {
     try {
       await schemaReady;
@@ -70,6 +73,7 @@ export async function ensureSchema() {
             phone TEXT,
             reg_no TEXT,
             gender TEXT,
+            branch TEXT,
             photo_url TEXT,
             created_at INTEGER NOT NULL
           )
@@ -118,13 +122,23 @@ export async function ensureSchema() {
 
       try { await env.sih_app_db.prepare("INSERT OR IGNORE INTO admins (email, created_at) VALUES ('2025pceacsaniket25@poornima.org', 1700000000)").run(); } catch {}
 
-      try { await env.sih_app_db.prepare("ALTER TABLE users ADD COLUMN name TEXT").run(); } catch {}
-      try { await env.sih_app_db.prepare("ALTER TABLE users ADD COLUMN phone TEXT").run(); } catch {}
-      try { await env.sih_app_db.prepare("ALTER TABLE users ADD COLUMN reg_no TEXT").run(); } catch {}
-      try { await env.sih_app_db.prepare("ALTER TABLE users ADD COLUMN gender TEXT").run(); } catch {}
-      try { await env.sih_app_db.prepare("ALTER TABLE users ADD COLUMN branch TEXT").run(); } catch {}
-    } catch (cause) {
-      console.error("[DB Schema Error]", cause);
+      // Conditionally add columns if they don't exist to avoid Miniflare logging internal errors on ALTER TABLE
+      const usersInfo = await env.sih_app_db.prepare("PRAGMA table_info(users)").all<{ name: string }>();
+      const existingCols = new Set(usersInfo.results.map((c) => c.name));
+
+      const alterStatements: string[] = [];
+      if (!existingCols.has("name")) alterStatements.push("ALTER TABLE users ADD COLUMN name TEXT");
+      if (!existingCols.has("phone")) alterStatements.push("ALTER TABLE users ADD COLUMN phone TEXT");
+      if (!existingCols.has("reg_no")) alterStatements.push("ALTER TABLE users ADD COLUMN reg_no TEXT");
+      if (!existingCols.has("gender")) alterStatements.push("ALTER TABLE users ADD COLUMN gender TEXT");
+      if (!existingCols.has("branch")) alterStatements.push("ALTER TABLE users ADD COLUMN branch TEXT");
+
+      for (const stmt of alterStatements) {
+        try { await env.sih_app_db.prepare(stmt).run(); } catch {}
+      }
+      schemaInitialized = true;
+    } catch (cause: any) {
+      console.error("[DB Schema Error]", cause, cause?.cause);
       throw cause;
     }
   })();
@@ -140,8 +154,8 @@ export async function isAdmin(email: string): Promise<boolean> {
       .bind(normalized)
       .first();
     return Boolean(result);
-  } catch (cause) {
-    console.error("[DB isAdmin Error]", cause);
+  } catch (cause: any) {
+    console.error("[DB isAdmin Error]", cause, cause?.cause);
     return false;
   }
 }
@@ -150,8 +164,8 @@ export async function safeDbRun<T>(fn: () => Promise<T>, fallbackMessage = "Data
   try {
     const data = await fn();
     return { data, error: null };
-  } catch (cause) {
-    console.error("[DB Run Error]", cause);
+  } catch (cause: any) {
+    console.error("[DB Run Error]", cause, cause?.cause);
     return { data: null, error: cause instanceof Error ? cause.message : fallbackMessage };
   }
 }
@@ -193,8 +207,8 @@ export async function upsertUser(input: {
         Date.now(),
       )
       .run();
-  } catch (cause) {
-    console.error("[DB upsertUser Error]", cause);
+  } catch (cause: any) {
+    console.error("[DB upsertUser Error]", cause, cause?.cause);
   }
 }
 
@@ -206,8 +220,8 @@ export async function upsertTeamMember(teamId: string, userId: string, email: st
       )
       .bind(teamId, userId, normalizeEmail(email), photoUrl ?? null, Date.now())
       .run();
-  } catch (cause) {
-    console.error("[DB upsertTeamMember Error]", cause);
+  } catch (cause: any) {
+    console.error("[DB upsertTeamMember Error]", cause, cause?.cause);
   }
 }
 
@@ -215,7 +229,7 @@ export async function queryDb<T>(label: string, fn: () => Promise<T>): Promise<T
   try {
     return await fn();
   } catch (cause: any) {
-    console.error(`❌ [D1 Query Failure at "${label}"]:`, cause?.message || cause);
+    console.error(`❌ [D1 Query Failure at "${label}"]:`, cause?.message || cause, cause?.cause);
     if (cause?.stack) {
       console.error(cause.stack);
     }

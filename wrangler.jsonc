@@ -29,17 +29,7 @@
 			"database_id": "ebe24eab-b89b-4a5c-9b4e-27ebb832fd91",
 			"remote": true
 		}
-	],
-	"unsafe": {
-		"bindings": [
-			{
-				"name": "RATE_LIMITER",
-				"type": "ratelimit",
-				"namespace_id": "1001",
-				"simple": { "limit": 60, "period": 60 }
-			}
-		]
-	}
+	]
 	/**
 	 * Smart Placement
 	 * https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement
