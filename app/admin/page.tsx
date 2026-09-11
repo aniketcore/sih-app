@@ -204,6 +204,15 @@ export default function AdminDashboardPage() {
     else if (userTab === "incomplete") list = incompleteProfileUsers;
     else if (userTab !== "all") list = users.filter((u) => getSection(u.email) === userTab);
     
+    // Sort by the 2 or 3 digit roll number just before the '@' in the email
+    list = [...list].sort((a, b) => {
+      const getRollNum = (email: string) => {
+        const match = email.match(/(\d+)@/);
+        return match ? parseInt(match[1], 10) : 99999;
+      };
+      return getRollNum(a.email) - getRollNum(b.email);
+    });
+
     if (!search.trim()) return list;
     const q = search.toLowerCase().trim();
     return list.filter(
