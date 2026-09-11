@@ -369,20 +369,37 @@ export function TeamBoard({ user }: { user: User }) {
                 <h4 className="text-xs font-bold uppercase text-slate-400">Members</h4>
                 <div className="divide-y divide-slate-100 text-sm">
                   {/* Leader Row */}
-                  <div className="flex items-center justify-between py-2">
-                    <span className="font-medium text-slate-900">{primaryTeam.ownerEmail}</span>
-                    <span className="text-xs font-bold text-slate-500 uppercase">Leader</span>
-                  </div>
+                  {(() => {
+                    const leader = primaryTeam.members.find(m => m.email === primaryTeam.ownerEmail);
+                    const isFemale = leader?.gender?.toLowerCase() === "female";
+                    const isMale = leader?.gender?.toLowerCase() === "male";
+                    return (
+                      <div className="flex items-center justify-between py-2">
+                        <div className="flex items-center gap-2">
+                          <span className={`flex-shrink-0 w-2 h-2 rounded-full ${isFemale ? 'bg-pink-400' : isMale ? 'bg-blue-400' : 'bg-slate-300'}`} title={leader?.gender ?? "Unknown"} />
+                          <span className="font-medium text-slate-900">{primaryTeam.ownerEmail}</span>
+                        </div>
+                        <span className="text-xs font-bold text-slate-500 uppercase">Leader</span>
+                      </div>
+                    );
+                  })()}
 
                   {/* Member Rows */}
                   {primaryTeam.members
                     .filter((m) => m.email !== primaryTeam.ownerEmail)
-                    .map((m) => (
-                      <div key={m.email} className="flex items-center justify-between py-2">
-                        <span className="text-slate-800">{m.email}</span>
-                        <span className="text-xs text-slate-400">Member</span>
-                      </div>
-                    ))}
+                    .map((m) => {
+                      const isFemale = m.gender?.toLowerCase() === "female";
+                      const isMale = m.gender?.toLowerCase() === "male";
+                      return (
+                        <div key={m.email} className="flex items-center justify-between py-2">
+                          <div className="flex items-center gap-2">
+                            <span className={`flex-shrink-0 w-2 h-2 rounded-full ${isFemale ? 'bg-pink-400' : isMale ? 'bg-blue-400' : 'bg-slate-300'}`} title={m.gender ?? "Unknown"} />
+                            <span className="text-slate-800">{m.email}</span>
+                          </div>
+                          <span className="text-xs text-slate-400">Member</span>
+                        </div>
+                      );
+                    })}
                 </div>
               </div>
             </div>

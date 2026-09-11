@@ -51,20 +51,28 @@ function AdminTeamCard({ t }: { t: AdminTeam }) {
 
       {isExpanded && (
         <div className="divide-y divide-slate-100 text-xs border-t border-slate-100 px-3 sm:px-4 pb-1">
-          {t.members.map((m, idx) => (
-            <div key={m.email || idx} className="py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-2 pl-4">
-              <div className="break-all">
-                <span className="font-semibold text-slate-900">{m.name ?? "N/A"}</span>{" "}
-                <span className="text-slate-500">({m.email})</span>
+          {t.members.map((m, idx) => {
+            const isFemale = m.gender?.toLowerCase() === "female";
+            const isMale = m.gender?.toLowerCase() === "male";
+            
+            return (
+              <div key={m.email || idx} className="py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-2 pl-4">
+                <div className="break-all flex items-center gap-2">
+                  <span className={`flex-shrink-0 w-2 h-2 rounded-full ${isFemale ? 'bg-pink-400' : isMale ? 'bg-blue-400' : 'bg-slate-300'}`} title={m.gender ?? "Unknown"} />
+                  <div>
+                    <span className="font-semibold text-slate-900">{m.name ?? "N/A"}</span>{" "}
+                    <span className="text-slate-500">({m.email})</span>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-slate-600">
+                  <span>Reg: {m.regNo ?? "N/A"}</span>
+                  <span>Branch: {m.branch ?? "N/A"}</span>
+                  <span className={isFemale ? 'text-pink-600 font-medium' : isMale ? 'text-blue-600 font-medium' : ''}>Gender: {m.gender ?? "N/A"}</span>
+                  <span>Phone: {m.phone ?? "N/A"}</span>
+                </div>
               </div>
-              <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-slate-600">
-                <span>Reg: {m.regNo ?? "N/A"}</span>
-                <span>Branch: {m.branch ?? "N/A"}</span>
-                <span>Gender: {m.gender ?? "N/A"}</span>
-                <span>Phone: {m.phone ?? "N/A"}</span>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
@@ -478,7 +486,10 @@ export default function AdminDashboardPage() {
                     <div key={u.id} className="border border-slate-200 p-3 bg-white space-y-1.5 text-xs">
                       <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-1.5">
                         <div>
-                          <div className="font-bold text-slate-900">{u.name ?? "Name Pending"}</div>
+                          <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                            <span className={`flex-shrink-0 w-2 h-2 rounded-full ${u.gender?.toLowerCase() === 'female' ? 'bg-pink-400' : u.gender?.toLowerCase() === 'male' ? 'bg-blue-400' : 'bg-slate-300'}`} />
+                            {u.name ?? "Name Pending"}
+                          </div>
                           <div className="text-slate-500 text-[11px] break-all">{u.email}</div>
                           <div className="mt-0.5 inline-block bg-slate-100 text-slate-600 px-1.5 py-0.5 text-[9px] font-bold rounded-sm border border-slate-200">{getSection(u.email)}</div>
                         </div>
@@ -503,7 +514,12 @@ export default function AdminDashboardPage() {
                       <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px] text-slate-600">
                         <div><span className="text-slate-400">Reg No:</span> {u.regNo ?? "N/A"}</div>
                         <div><span className="text-slate-400">Branch:</span> {u.branch ?? "N/A"}</div>
-                        <div><span className="text-slate-400">Gender:</span> {u.gender ?? "N/A"}</div>
+                        <div>
+                          <span className="text-slate-400">Gender:</span>{" "}
+                          <span className={u.gender?.toLowerCase() === 'female' ? 'text-pink-600 font-medium' : u.gender?.toLowerCase() === 'male' ? 'text-blue-600 font-medium' : ''}>
+                            {u.gender ?? "N/A"}
+                          </span>
+                        </div>
                         <div><span className="text-slate-400">Phone:</span> {u.phone ?? "N/A"}</div>
                       </div>
                     </div>
@@ -540,13 +556,18 @@ export default function AdminDashboardPage() {
 
                       return (
                         <tr key={u.id}>
-                          <td className="p-3 font-medium text-slate-900">{u.name ?? "N/A"}</td>
+                          <td className="p-3 font-medium text-slate-900">
+                            <div className="flex items-center gap-1.5">
+                              <span className={`flex-shrink-0 w-2 h-2 rounded-full ${u.gender?.toLowerCase() === 'female' ? 'bg-pink-400' : u.gender?.toLowerCase() === 'male' ? 'bg-blue-400' : 'bg-slate-300'}`} />
+                              {u.name ?? "N/A"}
+                            </div>
+                          </td>
                           <td className="p-3 text-slate-600">{u.email}</td>
                           <td className="p-3 text-slate-600"><span className="bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded-sm font-bold text-[10px]">{getSection(u.email)}</span></td>
                           <td className="p-3 text-slate-600">{u.phone ?? "N/A"}</td>
                           <td className="p-3 text-slate-600">{u.regNo ?? "N/A"}</td>
                           <td className="p-3 text-slate-600">{u.branch ?? "N/A"}</td>
-                          <td className="p-3 text-slate-600">{u.gender ?? "N/A"}</td>
+                          <td className={`p-3 ${u.gender?.toLowerCase() === 'female' ? 'text-pink-600 font-medium' : u.gender?.toLowerCase() === 'male' ? 'text-blue-600 font-medium' : 'text-slate-600'}`}>{u.gender ?? "N/A"}</td>
                           <td className="p-3">
                             <div className="flex items-center gap-1.5">
                               {!u.isComplete && (
