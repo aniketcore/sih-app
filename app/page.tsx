@@ -16,7 +16,8 @@ export default function ProfilePage() {
 
   async function checkProfile() {
     try {
-      const p = await teamStore.getUserProfile();
+      const res = await teamStore.getUserProfile();
+      const p = res.user;
       setProfile(p);
     } catch (cause) {
       console.error(cause);

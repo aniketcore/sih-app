@@ -1,10 +1,32 @@
 import { type User, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
 import { auth } from "./firebase";
-import { allowedEmailDomain, isAllowedEmail } from "./auth-policy";
 
 import { teamStore } from "./team-store";
 
 export type AuthUser = User;
+
+export const allowedEmailDomain = "poornima.org";
+
+export function getDevAllowedEmails() {
+  return (import.meta.env.VITE_TEST_EMAILS ?? "")
+    .split(",")
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+export function isAllowedEmail(email: string | null | undefined) {
+  if (!email) {
+    return false;
+  }
+
+  const normalized = email.trim().toLowerCase();
+
+  if (import.meta.env.VITE_ENABLE_TEST_MODE === "true") {
+    return normalized.endsWith(`@${allowedEmailDomain}`) || getDevAllowedEmails().includes(normalized);
+  }
+
+  return normalized.endsWith(`@${allowedEmailDomain}`);
+}
 
 export function subscribeAuth(cb: (user: User | null) => void) {
   return onAuthStateChanged(auth, (u) => {
@@ -57,6 +79,3 @@ export async function createUserWithEmail(email: string, password: string) {
   return result.user;
 }
 
-export async function signOutUser() {
-  return signOut(auth);
-}

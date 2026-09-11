@@ -18,7 +18,8 @@ type AdminTeam = Team & {
 
 function AdminTeamCard({ t }: { t: AdminTeam }) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const hasFemale = t.members.some((m) => m.gender?.toLowerCase() === "female");
+  const femaleCount = t.members.filter((m) => m.gender?.toLowerCase() === "female").length;
+  const hasFemale = femaleCount > 0;
 
   return (
     <div className="border border-slate-200 bg-white">
@@ -41,7 +42,7 @@ function AdminTeamCard({ t }: { t: AdminTeam }) {
                 : "border-amber-300 bg-amber-50 text-amber-800"
             }`}
           >
-            {hasFemale ? "✓ SIH Female Requirement Met" : "⚠️ Female Member Missing"}
+            {hasFemale ? `✓ SIH Female Requirement Met (${femaleCount})` : "⚠️ Female Member Missing"}
           </span>
           <span className="text-[11px] sm:text-xs border border-slate-200 px-2 py-0.5 text-slate-600 font-medium bg-slate-50">
             {t.members.length} / 6 Members
@@ -89,6 +90,7 @@ export default function AdminDashboardPage() {
   const [userTab, setUserTab] = useState<string>("all");
   const [teamTab, setTeamTab] = useState<string>("all");
   const [search, setSearch] = useState("");
+  const [isFrozen, setIsFrozen] = useState(false);
 
   const KNOWN_SECTIONS = ["IT","ME","CY","CR","CE","CA", "AD", "EC", "EE", "CS"];
 
@@ -98,6 +100,7 @@ export default function AdminDashboardPage() {
       if (data) {
         setUsers(data.users);
         setTeams(data.teams as AdminTeam[]);
+        setIsFrozen(data.isFrozen);
       }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Admin access denied");
@@ -132,6 +135,9 @@ export default function AdminDashboardPage() {
     return users.filter((u) => !assignedEmailsSet.has(u.email.toLowerCase()) && getSection(u.email) !== "OTHER");
   }, [users, assignedEmailsSet]);
 
+  const unassignedGirls = useMemo(() => unassignedUsers.filter((u) => u.gender?.toLowerCase() === "female"), [unassignedUsers]);
+  const unassignedBoys = useMemo(() => unassignedUsers.filter((u) => u.gender?.toLowerCase() === "male"), [unassignedUsers]);
+
   const incompleteProfileUsers = useMemo(() => {
     return users.filter((u) => {
       if (typeof u.isComplete === "boolean") return !u.isComplete;
@@ -152,6 +158,8 @@ export default function AdminDashboardPage() {
     const c: Record<string, number> = {
       all: users.length,
       unassigned: unassignedUsers.length,
+      unassignedGirls: unassignedGirls.length,
+      unassignedBoys: unassignedBoys.length,
       incomplete: incompleteProfileUsers.length,
       OTHER: 0,
     };
@@ -162,7 +170,7 @@ export default function AdminDashboardPage() {
       else c["OTHER"]++;
     });
     return c;
-  }, [users, unassignedUsers, incompleteProfileUsers]);
+  }, [users, unassignedUsers, unassignedGirls, unassignedBoys, incompleteProfileUsers]);
 
   const teamCounts = useMemo(() => {
     let complete = 0;
@@ -170,6 +178,7 @@ export default function AdminDashboardPage() {
     let valid = 0;
     let invalid = 0;
     let multipleFemales = 0;
+    let moreThan2Females = 0;
 
     teams.forEach((t) => {
       let femaleCount = 0;
@@ -185,6 +194,7 @@ export default function AdminDashboardPage() {
       else invalid++;
       
       if (femaleCount > 1) multipleFemales++;
+      if (femaleCount > 2) moreThan2Females++;
     });
 
     return {
@@ -194,6 +204,7 @@ export default function AdminDashboardPage() {
       valid,
       invalid,
       multipleFemales,
+      moreThan2Females,
     };
   }, [teams]);
 
@@ -201,6 +212,8 @@ export default function AdminDashboardPage() {
   const filteredUsers = useMemo(() => {
     let list = users;
     if (userTab === "unassigned") list = unassignedUsers;
+    else if (userTab === "unassignedGirls") list = unassignedGirls;
+    else if (userTab === "unassignedBoys") list = unassignedBoys;
     else if (userTab === "incomplete") list = incompleteProfileUsers;
     else if (userTab !== "all") list = users.filter((u) => getSection(u.email) === userTab);
     
@@ -232,6 +245,7 @@ export default function AdminDashboardPage() {
     else if (teamTab === "valid") list = teams.filter((t) => t.members.some((m) => m.gender?.toLowerCase() === "female"));
     else if (teamTab === "invalid") list = teams.filter((t) => !t.members.some((m) => m.gender?.toLowerCase() === "female"));
     else if (teamTab === "multipleFemales") list = teams.filter((t) => t.members.filter(m => m.gender?.toLowerCase() === "female").length > 1);
+    else if (teamTab === "moreThan2Females") list = teams.filter((t) => t.members.filter(m => m.gender?.toLowerCase() === "female").length > 2);
 
     if (!search.trim()) return list;
     const q = search.toLowerCase().trim();
@@ -306,6 +320,12 @@ export default function AdminDashboardPage() {
           </div>
         </div>
 
+        {isFrozen && (
+          <div className="border border-amber-200 bg-amber-50 p-3 text-amber-800 text-sm font-semibold rounded-sm flex items-center justify-center">
+            ❄️ Team formation is currently frozen. No changes can be made by students.
+          </div>
+        )}
+
         {/* Overview Stat Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
           <div className="border border-slate-200 p-2.5 sm:p-3 bg-white">
@@ -364,11 +384,15 @@ export default function AdminDashboardPage() {
                 {[
                   { id: "all", label: "All Users" },
                   { id: "unassigned", label: "Unassigned" },
+                  { id: "unassignedGirls", label: "Unassigned (Girls)" },
+                  { id: "unassignedBoys", label: "Unassigned (Boys)" },
                   { id: "incomplete", label: "Incomplete" },
                 ].map((tab) => {
                   const isActive = userTab === tab.id;
                   let activeClasses = "border-black bg-black text-white";
                   if (isActive && tab.id === "unassigned") activeClasses = "border-amber-600 bg-amber-600 text-white";
+                  if (isActive && tab.id === "unassignedGirls") activeClasses = "border-pink-500 bg-pink-500 text-white";
+                  if (isActive && tab.id === "unassignedBoys") activeClasses = "border-blue-500 bg-blue-500 text-white";
                   if (isActive && tab.id === "incomplete") activeClasses = "border-red-600 bg-red-600 text-white";
 
                   return (
@@ -442,11 +466,12 @@ export default function AdminDashboardPage() {
                   { id: "valid", label: "Valid (Has Female)" },
                   { id: "invalid", label: "Invalid (No Female)" },
                   { id: "multipleFemales", label: "Multiple Females" },
+                  { id: "moreThan2Females", label: "More Than 2 Females" },
                 ].map((tab) => {
                   const isActive = teamTab === tab.id;
                   let activeClasses = "border-black bg-black text-white";
                   if (isActive && tab.id === "invalid") activeClasses = "border-amber-600 bg-amber-600 text-white";
-                  if (isActive && (tab.id === "valid" || tab.id === "multipleFemales")) activeClasses = "border-emerald-600 bg-emerald-600 text-white";
+                  if (isActive && (tab.id === "valid" || tab.id === "multipleFemales" || tab.id === "moreThan2Females")) activeClasses = "border-emerald-600 bg-emerald-600 text-white";
 
                   return (
                     <button

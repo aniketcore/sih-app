@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { teamStore, type UserProfile } from "../lib/team-store";
-import { signOutUser } from "../lib/auth";
+import { auth } from "../lib/firebase";
+import { signOut } from "firebase/auth";
 
 export function ProfileOnboardingModal({
   profile,
@@ -22,7 +23,7 @@ export function ProfileOnboardingModal({
   async function handleSignOut() {
     setBusy(true);
     try {
-      await signOutUser();
+      await signOut(auth);
       window.location.href = "/login";
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Sign-out failed");

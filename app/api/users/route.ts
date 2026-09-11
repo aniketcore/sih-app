@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { NextRequest } from "next/server";
-import { ensureSchema, getVerifiedUser, json, upsertUser, isAdmin } from "../db";
+import { ensureSchema, getVerifiedUser, upsertUser, isAdmin, getIsFrozen, getIsLeadersOnlyLogin } from "../db";
 import { normalizeEmail } from "@/lib/invite-state";
 
 export async function GET(request: NextRequest) {
@@ -9,18 +9,23 @@ export async function GET(request: NextRequest) {
     const user = await getVerifiedUser(request);
 
     if (!user) {
-      return json({ error: "Unauthorized" }, { status: 401 });
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const [row, userIsAdmin] = await Promise.all([
+    const [row, userIsAdmin, isLeadersOnlyLogin, isLeaderResult] = await Promise.all([
       env.sih_app_db
         .prepare("SELECT id, email, name, phone, reg_no, gender, branch, photo_url FROM users WHERE id = ?")
         .bind(user.uid)
         .first<{ id: string; email: string; name?: string | null; phone?: string | null; reg_no?: string | null; gender?: string | null; branch?: string | null; photo_url?: string | null }>(),
-      isAdmin(user.email)
+      isAdmin(user.email),
+      getIsLeadersOnlyLogin(),
+      env.sih_app_db.prepare("SELECT 1 FROM teams WHERE owner_uid = ? LIMIT 1").bind(user.uid).first(),
     ]);
 
-    return json({
+    return Response.json({
+      isFrozen: await getIsFrozen(),
+      isLeadersOnlyLogin,
+      isLeader: Boolean(isLeaderResult),
       user: row
         ? {
             id: row.id,
@@ -38,7 +43,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (cause) {
     console.error("[GET /api/users error]", cause);
-    return json({ error: "Failed to fetch user profile" }, { status: 500 });
+    return Response.json({ error: "Failed to fetch user profile" }, { status: 500 });
   }
 }
 
@@ -48,10 +53,10 @@ export async function POST(request: NextRequest) {
     const user = await getVerifiedUser(request);
 
     if (!user) {
-      return json({ error: "Unauthorized" }, { status: 401 });
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = (await request.json()) as {
+    const body = (await request.Response.json()) as {
       uid: string;
       email: string;
       name?: string;
@@ -63,7 +68,7 @@ export async function POST(request: NextRequest) {
     };
 
     if (body.uid !== user.uid || normalizeEmail(body.email) !== normalizeEmail(user.email)) {
-      return json({ error: "Forbidden" }, { status: 403 });
+      return Response.json({ error: "Forbidden" }, { status: 403 });
     }
 
     await upsertUser({
@@ -77,10 +82,10 @@ export async function POST(request: NextRequest) {
       photoUrl: body.photoUrl ?? user.photoUrl,
     });
 
-    return json({ ok: true });
+    return Response.json({ ok: true });
   } catch (cause) {
     console.error("[POST /api/users error]", cause);
-    return json({ error: "Failed to sync user" }, { status: 500 });
+    return Response.json({ error: "Failed to sync user" }, { status: 500 });
   }
 }
 

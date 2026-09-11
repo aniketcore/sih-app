@@ -1,25 +1,25 @@
 import { env } from "cloudflare:workers";
 import { NextRequest } from "next/server";
-import { checkRateLimit, ensureSchema, getVerifiedUser, json, upsertTeamMember, upsertUser } from "../db";
+import { checkRateLimit, ensureSchema, getVerifiedUser, upsertTeamMember, upsertUser, getIsFrozen } from "../db";
 import { normalizeEmail } from "@/lib/invite-state";
 
 export async function GET(request: NextRequest) {
   try {
     const isAllowed = await checkRateLimit(request);
     if (!isAllowed) {
-      return json({ error: "Too many requests. Please slow down." }, { status: 429 });
+      return Response.json({ error: "Too many requests. Please slow down." }, { status: 429 });
     }
 
     await ensureSchema();
     const userId = request.nextUrl.searchParams.get("userId");
 
     if (!userId) {
-      return json({ error: "Missing userId parameter" }, { status: 400 });
+      return Response.json({ error: "Missing userId parameter" }, { status: 400 });
     }
 
     const user = await getVerifiedUser(request);
     if (!user || user.uid !== userId) {
-      return json({ error: "Unauthorized" }, { status: 401 });
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const result = await env.sih_app_db
@@ -67,31 +67,43 @@ export async function GET(request: NextRequest) {
       }),
     );
 
-    return json({ teams });
+    return Response.json({ teams });
   } catch (cause: any) {
     console.error("[GET /api/teams error]", cause, cause?.cause);
-    return json({ error: "Failed to fetch teams" }, { status: 500 });
+    return Response.json({ error: "Failed to fetch teams" }, { status: 500 });
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
     await ensureSchema();
+    if (await getIsFrozen()) {
+      return Response.json({ error: "Team formation is currently frozen." }, { status: 403 });
+    }
     const user = await getVerifiedUser(request);
 
     if (!user) {
-      return json({ error: "Unauthorized" }, { status: 401 });
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = (await request.json()) as { name: string; ownerUid: string; ownerEmail: string };
+    const body = (await request.Response.json()) as { name: string; ownerUid: string; ownerEmail: string };
     const name = body.name?.trim();
 
     if (!name) {
-      return json({ error: "Team name is required" }, { status: 400 });
+      return Response.json({ error: "Team name is required" }, { status: 400 });
     }
 
     if (body.ownerUid !== user.uid || normalizeEmail(body.ownerEmail) !== normalizeEmail(user.email)) {
-      return json({ error: "Forbidden" }, { status: 403 });
+      return Response.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const userProfile = await env.sih_app_db
+      .prepare("SELECT name, phone, reg_no, gender, branch FROM users WHERE id = ?")
+      .bind(user.uid)
+      .first<{ name?: string | null; phone?: string | null; reg_no?: string | null; gender?: string | null; branch?: string | null }>();
+
+    if (!userProfile || !userProfile.name || !userProfile.phone || !userProfile.reg_no || !userProfile.gender || !userProfile.branch) {
+      return Response.json({ error: "You must complete your profile before creating a team." }, { status: 403 });
     }
 
     // Check if user already owns or belongs to a team
@@ -106,7 +118,7 @@ export async function POST(request: NextRequest) {
       .first();
 
     if (existingTeam) {
-      return json({ error: "You are already part of a team" }, { status: 409 });
+      return Response.json({ error: "You are already part of a team" }, { status: 409 });
     }
 
     await upsertUser({ uid: user.uid, email: user.email, photoUrl: user.photoUrl });
@@ -125,31 +137,34 @@ export async function POST(request: NextRequest) {
       .bind(normalizeEmail(user.email))
       .run();
 
-    return json({ ok: true, id: newTeamId }, { status: 201 });
+    return Response.json({ ok: true, id: newTeamId }, { status: 201 });
   } catch (cause: any) {
     console.error("[POST /api/teams error]", cause, cause?.cause);
-    return json({ error: "Failed to create team" }, { status: 500 });
+    return Response.json({ error: "Failed to create team" }, { status: 500 });
   }
 }
 
 export async function PATCH(request: NextRequest) {
   try {
     await ensureSchema();
+    if (await getIsFrozen()) {
+      return Response.json({ error: "Team formation is currently frozen." }, { status: 403 });
+    }
     const user = await getVerifiedUser(request);
 
     if (!user) {
-      return json({ error: "Unauthorized" }, { status: 401 });
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = (await request.json()) as { teamId: string; name: string };
+    const body = (await request.Response.json()) as { teamId: string; name: string };
     const name = body.name?.trim();
 
     if (!name) {
-      return json({ error: "Team name is required" }, { status: 400 });
+      return Response.json({ error: "Team name is required" }, { status: 400 });
     }
 
     if (!body.teamId) {
-      return json({ error: "Missing teamId" }, { status: 400 });
+      return Response.json({ error: "Missing teamId" }, { status: 400 });
     }
 
     // Verify sender is the team leader
@@ -159,7 +174,7 @@ export async function PATCH(request: NextRequest) {
       .first<{ id: string; owner_uid: string }>();
 
     if (!team || team.owner_uid !== user.uid) {
-      return json({ error: "Forbidden: Only team leader can rename the team" }, { status: 403 });
+      return Response.json({ error: "Forbidden: Only team leader can rename the team" }, { status: 403 });
     }
 
     // Update team name in teams table and team_invites table atomically
@@ -168,27 +183,30 @@ export async function PATCH(request: NextRequest) {
       env.sih_app_db.prepare("UPDATE team_invites SET team_name = ? WHERE team_id = ?").bind(name, body.teamId),
     ]);
 
-    return json({ ok: true });
+    return Response.json({ ok: true });
   } catch (cause: any) {
     console.error("[PATCH /api/teams error]", cause, cause?.cause);
-    return json({ error: "Failed to rename team" }, { status: 500 });
+    return Response.json({ error: "Failed to rename team" }, { status: 500 });
   }
 }
 
 export async function DELETE(request: NextRequest) {
   try {
     await ensureSchema();
+    if (await getIsFrozen()) {
+      return Response.json({ error: "Team formation is currently frozen." }, { status: 403 });
+    }
     const user = await getVerifiedUser(request);
 
     if (!user) {
-      return json({ error: "Unauthorized" }, { status: 401 });
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const teamId = request.nextUrl.searchParams.get("teamId");
     const targetEmail = request.nextUrl.searchParams.get("targetEmail");
 
     if (!teamId) {
-      return json({ error: "Missing teamId parameter" }, { status: 400 });
+      return Response.json({ error: "Missing teamId parameter" }, { status: 400 });
     }
 
     const team = await env.sih_app_db
@@ -198,7 +216,7 @@ export async function DELETE(request: NextRequest) {
 
     if (!team) {
       // Idempotent: If the team was already deleted concurrently by the leader, treat request as succeeded
-      return json({ ok: true, action: "already_removed" });
+      return Response.json({ ok: true, action: "already_removed" });
     }
 
     const isOwner = team.owner_uid === user.uid;
@@ -208,11 +226,11 @@ export async function DELETE(request: NextRequest) {
       const isSelf = normalizedTarget === normalizeEmail(user.email);
 
       if (!isOwner && !isSelf) {
-        return json({ error: "Forbidden: Only team leader can kick members" }, { status: 403 });
+        return Response.json({ error: "Forbidden: Only team leader can kick members" }, { status: 403 });
       }
 
       if (normalizedTarget === normalizeEmail(team.owner_email)) {
-        return json({ error: "Cannot kick the team leader. Delete the team instead." }, { status: 400 });
+        return Response.json({ error: "Cannot kick the team leader. Delete the team instead." }, { status: 400 });
       }
 
       const res = await env.sih_app_db.batch([
@@ -221,11 +239,11 @@ export async function DELETE(request: NextRequest) {
       ]);
 
       const changes = res[0].meta.changes;
-      return json({ ok: true, action: changes > 0 ? (isSelf ? "left" : "kicked") : "already_removed" });
+      return Response.json({ ok: true, action: changes > 0 ? (isSelf ? "left" : "kicked") : "already_removed" });
     }
 
     if (!isOwner) {
-      return json({ error: "Forbidden: Only the team leader can delete this team" }, { status: 403 });
+      return Response.json({ error: "Forbidden: Only the team leader can delete this team" }, { status: 403 });
     }
 
     await env.sih_app_db.batch([
@@ -234,10 +252,10 @@ export async function DELETE(request: NextRequest) {
       env.sih_app_db.prepare("DELETE FROM team_invites WHERE team_id = ?").bind(teamId),
     ]);
 
-    return json({ ok: true, action: "deleted" });
+    return Response.json({ ok: true, action: "deleted" });
 
   } catch (cause: any) {
     console.error("[DELETE /api/teams error]", cause, cause?.cause);
-    return json({ error: "Failed to delete team or remove member" }, { status: 500 });
+    return Response.json({ error: "Failed to delete team or remove member" }, { status: 500 });
   }
 }

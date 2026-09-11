@@ -17,7 +17,7 @@ function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
-export function TeamBoard({ user }: { user: User }) {
+export function TeamBoard({ user, isFrozen = false }: { user: User; isFrozen?: boolean }) {
   const [teamName, setTeamName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [teams, setTeams] = useState<Team[]>([]);
@@ -246,7 +246,7 @@ export function TeamBoard({ user }: { user: User }) {
               />
               <button
                 className="bg-black px-4 py-2 text-sm font-medium text-white disabled:opacity-50 hover:bg-slate-800"
-                disabled={busy}
+                disabled={busy || isFrozen}
                 onClick={() => sendInvite(primaryTeam)}
                 type="button"
               >
@@ -271,7 +271,7 @@ export function TeamBoard({ user }: { user: User }) {
             />
             <button
               className="bg-black px-4 py-2 text-sm font-medium text-white disabled:opacity-50 hover:bg-slate-800"
-              disabled={busy}
+              disabled={busy || isFrozen}
               onClick={createTeam}
               type="button"
             >
@@ -279,6 +279,12 @@ export function TeamBoard({ user }: { user: User }) {
             </button>
           </div>
           <p className="text-xs text-slate-500">Teams can have up to 6 members total.</p>
+        </div>
+      )}
+
+      {isFrozen && (
+        <div className="border border-red-200 bg-red-50 p-4 text-sm text-red-700 font-bold flex items-center justify-center">
+          ❄️ Team formation is frozen. No further changes can be made.
         </div>
       )}
 
@@ -319,7 +325,7 @@ export function TeamBoard({ user }: { user: User }) {
                       />
                       <button
                         type="button"
-                        disabled={busy}
+                        disabled={busy || isFrozen}
                         onClick={handleRenameTeam}
                         className="bg-black text-white px-2.5 py-1 text-xs font-semibold hover:bg-slate-800 disabled:opacity-50"
                       >
@@ -343,7 +349,8 @@ export function TeamBoard({ user }: { user: User }) {
                             setEditedTeamName(primaryTeam.name);
                             setIsEditingName(true);
                           }}
-                          className="text-xs text-slate-500 hover:text-black underline font-medium"
+                          disabled={isFrozen}
+                          className="text-xs text-slate-500 hover:text-black underline font-medium disabled:opacity-50"
                         >
                           Rename
                         </button>
@@ -427,7 +434,7 @@ export function TeamBoard({ user }: { user: User }) {
                       </div>
                       <button
                         className="border border-red-200 px-3 py-1 text-xs text-red-600 hover:bg-red-50 disabled:opacity-50"
-                        disabled={busy}
+                        disabled={busy || isFrozen}
                         onClick={() => cancelInvite(invite.id)}
                         type="button"
                       >
@@ -465,7 +472,7 @@ export function TeamBoard({ user }: { user: User }) {
                       {invite.status === "pending" ? (
                         <button
                           className="bg-black px-3 py-1 text-xs text-white disabled:opacity-50 hover:bg-slate-800"
-                          disabled={busy}
+                          disabled={busy || isFrozen}
                           onClick={() => acceptInvite(invite)}
                           type="button"
                         >
@@ -494,7 +501,7 @@ export function TeamBoard({ user }: { user: User }) {
                   <div>
                     <button
                       className="border border-red-300 bg-white px-3 py-1 text-xs text-red-600 hover:bg-red-50 disabled:opacity-50"
-                      disabled={busy}
+                      disabled={busy || isFrozen}
                       onClick={() => openDangerModal("leave", primaryTeam.id, primaryTeam.name, user.email ?? "")}
                       type="button"
                     >
@@ -510,7 +517,7 @@ export function TeamBoard({ user }: { user: User }) {
                         <div key={m.email}>
                           <button
                             className="border border-red-300 bg-white px-3 py-1 text-xs text-red-600 hover:bg-red-50 disabled:opacity-50 text-left break-all"
-                            disabled={busy}
+                            disabled={busy || isFrozen}
                             onClick={() => openDangerModal("kick", primaryTeam.id, primaryTeam.name, m.email)}
                             type="button"
                           >
@@ -525,7 +532,7 @@ export function TeamBoard({ user }: { user: User }) {
                 <div className="pt-2 border-t border-red-200">
                   <button
                     className="bg-red-600 px-3 py-1.5 text-xs text-white hover:bg-red-700 disabled:opacity-50"
-                    disabled={busy}
+                    disabled={busy || isFrozen}
                     onClick={() => openDangerModal("delete", primaryTeam.id, primaryTeam.name)}
                     type="button"
                   >

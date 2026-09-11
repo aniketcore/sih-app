@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { subscribeAuth, signOutUser, type AuthUser } from "../lib/auth";
+import { subscribeAuth, type AuthUser } from "../lib/auth";
+import { auth } from "../lib/firebase";
+import { signOut } from "firebase/auth";
 
 export function Navbar() {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -27,7 +29,7 @@ export function Navbar() {
           </Link>
           <button
             className="text-xs text-slate-500 underline hover:text-slate-800"
-            onClick={() => signOutUser()}
+            onClick={() => signOut(auth)}
             type="button"
           >
             Sign out

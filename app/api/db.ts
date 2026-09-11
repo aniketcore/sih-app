@@ -118,6 +118,21 @@ export async function ensureSchema() {
             created_at INTEGER NOT NULL
           )
         `),
+        env.sih_app_db.prepare(`
+          CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+          )
+        `),
+        env.sih_app_db.prepare(`
+          CREATE TRIGGER IF NOT EXISTS enforce_team_limit
+          BEFORE INSERT ON team_members
+          FOR EACH ROW
+          WHEN (SELECT COUNT(*) FROM team_members WHERE team_id = NEW.team_id) >= 6
+          BEGIN
+            SELECT RAISE(ABORT, 'Team is already full (maximum 6 members)');
+          END;
+        `),
       ]);
 
       try { await env.sih_app_db.prepare("INSERT OR IGNORE INTO admins (email, created_at) VALUES ('2025pceacsaniket25@poornima.org', 1700000000)").run(); } catch {}
@@ -160,13 +175,49 @@ export async function isAdmin(email: string): Promise<boolean> {
   }
 }
 
-export async function safeDbRun<T>(fn: () => Promise<T>, fallbackMessage = "Database operation failed"): Promise<{ data: T | null; error: string | null }> {
+export async function getIsFrozen(): Promise<boolean> {
   try {
-    const data = await fn();
-    return { data, error: null };
+    const result = await env.sih_app_db
+      .prepare("SELECT value FROM settings WHERE key = 'is_frozen'")
+      .first<{ value: string }>();
+    return result?.value === "true";
   } catch (cause: any) {
-    console.error("[DB Run Error]", cause, cause?.cause);
-    return { data: null, error: cause instanceof Error ? cause.message : fallbackMessage };
+    console.error("[DB getIsFrozen Error]", cause, cause?.cause);
+    return false;
+  }
+}
+
+export async function getIsLeadersOnlyLogin(): Promise<boolean> {
+  try {
+    const result = await env.sih_app_db
+      .prepare("SELECT value FROM settings WHERE key = 'leaders_only_login'")
+      .first<{ value: string }>();
+    return result?.value === "true";
+  } catch (cause: any) {
+    console.error("[DB getIsLeadersOnlyLogin Error]", cause, cause?.cause);
+    return false;
+  }
+}
+
+export async function setIsFrozen(frozen: boolean): Promise<void> {
+  try {
+    await env.sih_app_db
+      .prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('is_frozen', ?)")
+      .bind(frozen ? "true" : "false")
+      .run();
+  } catch (cause: any) {
+    console.error("[DB setIsFrozen Error]", cause, cause?.cause);
+  }
+}
+
+export async function setIsLeadersOnlyLogin(leadersOnly: boolean): Promise<void> {
+  try {
+    await env.sih_app_db
+      .prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('leaders_only_login', ?)")
+      .bind(leadersOnly ? "true" : "false")
+      .run();
+  } catch (cause: any) {
+    console.error("[DB setIsLeadersOnlyLogin Error]", cause, cause?.cause);
   }
 }
 
@@ -223,22 +274,6 @@ export async function upsertTeamMember(teamId: string, userId: string, email: st
   } catch (cause: any) {
     console.error("[DB upsertTeamMember Error]", cause, cause?.cause);
   }
-}
-
-export async function queryDb<T>(label: string, fn: () => Promise<T>): Promise<T> {
-  try {
-    return await fn();
-  } catch (cause: any) {
-    console.error(`❌ [D1 Query Failure at "${label}"]:`, cause?.message || cause, cause?.cause);
-    if (cause?.stack) {
-      console.error(cause.stack);
-    }
-    throw cause;
-  }
-}
-
-export function json(data: unknown, init?: ResponseInit) {
-  return Response.json(data, init);
 }
 
 

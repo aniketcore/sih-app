@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { NextRequest } from "next/server";
-import { ensureSchema, getVerifiedUser, isAdmin, json } from "../db";
+import { ensureSchema, getVerifiedUser, isAdmin, getIsFrozen } from "../db";
 
 export async function GET(request: NextRequest) {
   try {
@@ -8,12 +8,12 @@ export async function GET(request: NextRequest) {
     const user = await getVerifiedUser(request);
 
     if (!user) {
-      return json({ error: "Unauthorized" }, { status: 401 });
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const adminCheck = await isAdmin(user.email);
     if (!adminCheck) {
-      return json({ error: "Forbidden: Admin access required" }, { status: 403 });
+      return Response.json({ error: "Forbidden: Admin access required" }, { status: 403 });
     }
 
     // Fetch all users
@@ -85,7 +85,8 @@ export async function GET(request: NextRequest) {
       members: membersByTeamId.get(t.id) || [],
     }));
 
-    return json({
+    return Response.json({
+      isFrozen: await getIsFrozen(),
       users: usersResult.results.map((u) => {
         const name = u.name?.trim() || null;
         const phone = u.phone?.trim() || null;
@@ -109,6 +110,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (cause) {
     console.error("[GET /api/admin error]", cause);
-    return json({ error: "Failed to fetch admin data" }, { status: 500 });
+    return Response.json({ error: "Failed to load admin data" }, { status: 500 });
   }
 }
+

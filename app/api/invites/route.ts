@@ -1,19 +1,19 @@
 import { env } from "cloudflare:workers";
 import { NextRequest } from "next/server";
-import { checkRateLimit, ensureSchema, getVerifiedUser, json, upsertTeamMember, upsertUser } from "../db";
+import { checkRateLimit, ensureSchema, getVerifiedUser, upsertTeamMember, upsertUser, getIsFrozen } from "../db";
 import { normalizeEmail } from "@/lib/invite-state";
 
 export async function GET(request: NextRequest) {
   try {
     const isAllowed = await checkRateLimit(request);
     if (!isAllowed) {
-      return json({ error: "Too many requests. Please slow down." }, { status: 429 });
+      return Response.json({ error: "Too many requests. Please slow down." }, { status: 429 });
     }
 
     await ensureSchema();
     const user = await getVerifiedUser(request);
     if (!user) {
-      return json({ error: "Unauthorized" }, { status: 401 });
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const email = request.nextUrl.searchParams.get("email");
@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
         .first();
 
       if (!isOwner) {
-        return json({ error: "Forbidden: Only team leader can view outgoing invites" }, { status: 403 });
+        return Response.json({ error: "Forbidden: Only team leader can view outgoing invites" }, { status: 403 });
       }
 
       const result = await env.sih_app_db
@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
         .bind(teamId)
         .all<{ id: string; team_id: string; team_name: string; from_email: string; to_email: string; status: string; created_at: number }>();
 
-      return json({
+      return Response.json({
         outgoingInvites: result.results.map((row) => ({
           id: row.id,
           teamId: row.team_id,
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (!email || normalizeEmail(email) !== normalizeEmail(user.email)) {
-      return json({ error: "Forbidden: Cannot view invites for another account" }, { status: 403 });
+      return Response.json({ error: "Forbidden: Cannot view invites for another account" }, { status: 403 });
     }
 
     // If user is already part of a team (owner or member), they have no active incoming invites
@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
       .first();
 
     if (inTeam) {
-      return json({ invites: [] });
+      return Response.json({ invites: [] });
     }
 
     const result = await env.sih_app_db
@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
       .bind(normalizeEmail(email))
       .all<{ id: string; team_id: string; team_name: string; from_email: string; to_email: string; status: string }>();
 
-    return json({
+    return Response.json({
       invites: result.results.map((row) => ({
         id: row.id,
         teamId: row.team_id,
@@ -84,22 +84,25 @@ export async function GET(request: NextRequest) {
     });
   } catch (cause) {
     console.error("[GET /api/invites error]", cause);
-    return json({ error: "Failed to fetch invites" }, { status: 500 });
+    return Response.json({ error: "Failed to fetch invites" }, { status: 500 });
   }
 }
 
 export async function DELETE(request: NextRequest) {
   try {
     await ensureSchema();
+    if (await getIsFrozen()) {
+      return Response.json({ error: "Team formation is currently frozen." }, { status: 403 });
+    }
     const user = await getVerifiedUser(request);
 
     if (!user) {
-      return json({ error: "Unauthorized" }, { status: 401 });
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const inviteId = request.nextUrl.searchParams.get("inviteId");
     if (!inviteId) {
-      return json({ error: "Missing inviteId" }, { status: 400 });
+      return Response.json({ error: "Missing inviteId" }, { status: 400 });
     }
 
     const invite = await env.sih_app_db
@@ -108,7 +111,7 @@ export async function DELETE(request: NextRequest) {
       .first<{ id: string; team_id: string; from_uid: string }>();
 
     if (!invite || invite.from_uid !== user.uid) {
-      return json({ error: "Forbidden: Only the sender can cancel this invite" }, { status: 403 });
+      return Response.json({ error: "Forbidden: Only the sender can cancel this invite" }, { status: 403 });
     }
 
     await env.sih_app_db
@@ -116,23 +119,26 @@ export async function DELETE(request: NextRequest) {
       .bind(inviteId)
       .run();
 
-    return json({ ok: true });
+    return Response.json({ ok: true });
   } catch (cause) {
     console.error("[DELETE /api/invites error]", cause);
-    return json({ error: "Failed to cancel invite" }, { status: 500 });
+    return Response.json({ error: "Failed to cancel invite" }, { status: 500 });
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
     await ensureSchema();
+    if (await getIsFrozen()) {
+      return Response.json({ error: "Team formation is currently frozen." }, { status: 403 });
+    }
     const user = await getVerifiedUser(request);
 
     if (!user) {
-      return json({ error: "Unauthorized" }, { status: 401 });
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = (await request.json()) as {
+    const body = (await request.Response.json()) as {
       teamId: string;
       teamName: string;
       fromUid: string;
@@ -141,7 +147,7 @@ export async function POST(request: NextRequest) {
     };
 
     if (body.fromUid !== user.uid || normalizeEmail(body.fromEmail) !== normalizeEmail(user.email)) {
-      return json({ error: "Forbidden" }, { status: 403 });
+      return Response.json({ error: "Forbidden" }, { status: 403 });
     }
 
     // Verify sender is the team owner (only leaders can invite)
@@ -151,7 +157,7 @@ export async function POST(request: NextRequest) {
       .first();
 
     if (!isOwner) {
-      return json({ error: "Forbidden: Only the team leader can send invites" }, { status: 403 });
+      return Response.json({ error: "Forbidden: Only the team leader can send invites" }, { status: 403 });
     }
 
     // Enforce team size limit (max 6 members including team leader)
@@ -167,12 +173,12 @@ export async function POST(request: NextRequest) {
 
     const totalSpots = (memberCount?.count ?? 0) + (pendingCount?.count ?? 0);
     if (totalSpots >= 6) {
-      return json({ error: "Team size limit reached (maximum 6 members including leader)" }, { status: 400 });
+      return Response.json({ error: "Team size limit reached (maximum 6 members including leader)" }, { status: 400 });
     }
 
     const inviteEmail = normalizeEmail(body.toEmail);
     if (!inviteEmail || inviteEmail === normalizeEmail(user.email)) {
-      return json({ error: "Invalid target email" }, { status: 400 });
+      return Response.json({ error: "Invalid target email" }, { status: 400 });
     }
 
     const targetUser = await env.sih_app_db
@@ -181,7 +187,7 @@ export async function POST(request: NextRequest) {
       .first();
 
     if (!targetUser) {
-      return json({ error: "User does not exist in this app" }, { status: 400 });
+      return Response.json({ error: "User does not exist in this app" }, { status: 400 });
     }
 
     const existingTeamMembership = await env.sih_app_db
@@ -195,7 +201,7 @@ export async function POST(request: NextRequest) {
       .first();
 
     if (existingTeamMembership) {
-      return json({ error: "User is already part of a team" }, { status: 409 });
+      return Response.json({ error: "User is already part of a team" }, { status: 409 });
     }
 
     const existingInvite = await env.sih_app_db
@@ -204,7 +210,7 @@ export async function POST(request: NextRequest) {
       .first();
 
     if (existingInvite) {
-      return json({ error: "Invite already pending" }, { status: 409 });
+      return Response.json({ error: "Invite already pending" }, { status: 409 });
     }
 
     const inviteId = crypto.randomUUID();
@@ -215,26 +221,38 @@ export async function POST(request: NextRequest) {
       .bind(inviteId, body.teamId, body.teamName, body.fromUid, body.fromEmail, inviteEmail, Date.now())
       .run();
 
-    return json({ ok: true, id: inviteId }, { status: 201 });
+    return Response.json({ ok: true, id: inviteId }, { status: 201 });
   } catch (cause) {
     console.error("[POST /api/invites error]", cause);
-    return json({ error: "Failed to send invite" }, { status: 500 });
+    return Response.json({ error: "Failed to send invite" }, { status: 500 });
   }
 }
 
 export async function PATCH(request: NextRequest) {
   try {
     await ensureSchema();
+    if (await getIsFrozen()) {
+      return Response.json({ error: "Team formation is currently frozen." }, { status: 403 });
+    }
     const user = await getVerifiedUser(request);
 
     if (!user) {
-      return json({ error: "Unauthorized" }, { status: 401 });
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = (await request.json()) as { inviteId: string; userId: string; userEmail: string };
+    const body = (await request.Response.json()) as { inviteId: string; userId: string; userEmail: string };
 
     if (body.userId !== user.uid || normalizeEmail(body.userEmail) !== normalizeEmail(user.email)) {
-      return json({ error: "Forbidden" }, { status: 403 });
+      return Response.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const userProfile = await env.sih_app_db
+      .prepare("SELECT name, phone, reg_no, gender, branch FROM users WHERE id = ?")
+      .bind(user.uid)
+      .first<{ name?: string | null; phone?: string | null; reg_no?: string | null; gender?: string | null; branch?: string | null }>();
+
+    if (!userProfile || !userProfile.name || !userProfile.phone || !userProfile.reg_no || !userProfile.gender || !userProfile.branch) {
+      return Response.json({ error: "You must complete your profile before accepting an invite." }, { status: 403 });
     }
 
     const invite = await env.sih_app_db
@@ -243,7 +261,7 @@ export async function PATCH(request: NextRequest) {
       .first<{ id: string; team_id: string; to_email: string; status: string }>();
 
     if (!invite || invite.status !== "pending" || normalizeEmail(invite.to_email) !== normalizeEmail(user.email)) {
-      return json({ error: "Invalid invite" }, { status: 400 });
+      return Response.json({ error: "Invalid invite" }, { status: 400 });
     }
 
     const existingTeamMembership = await env.sih_app_db
@@ -257,7 +275,7 @@ export async function PATCH(request: NextRequest) {
       .first();
 
     if (existingTeamMembership) {
-      return json({ error: "You are already part of a team" }, { status: 409 });
+      return Response.json({ error: "You are already part of a team" }, { status: 409 });
     }
 
     const currentMembers = await env.sih_app_db
@@ -266,7 +284,7 @@ export async function PATCH(request: NextRequest) {
       .first<{ count: number }>();
 
     if ((currentMembers?.count ?? 0) >= 6) {
-      return json({ error: "Team is already full (maximum 6 members)" }, { status: 400 });
+      return Response.json({ error: "Team is already full (maximum 6 members)" }, { status: 400 });
     }
 
     // Atomic D1 batch: Add member and clear pending invites in one atomic execution
@@ -277,10 +295,13 @@ export async function PATCH(request: NextRequest) {
       env.sih_app_db.prepare("DELETE FROM team_invites WHERE to_email = ?").bind(normalizeEmail(user.email)),
     ]);
 
-    return json({ ok: true });
-  } catch (cause) {
+    return Response.json({ ok: true });
+  } catch (cause: any) {
     console.error("[PATCH /api/invites error]", cause);
-    return json({ error: "Failed to accept invite" }, { status: 500 });
+    if (cause?.message?.includes("Team is already full")) {
+      return Response.json({ error: "Team is already full (maximum 6 members)" }, { status: 400 });
+    }
+    return Response.json({ error: "Failed to accept invite" }, { status: 500 });
   }
 }
 
