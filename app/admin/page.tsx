@@ -129,7 +129,7 @@ export default function AdminDashboardPage() {
 
   // Derived filtered lists
   const unassignedUsers = useMemo(() => {
-    return users.filter((u) => !assignedEmailsSet.has(u.email.toLowerCase()));
+    return users.filter((u) => !assignedEmailsSet.has(u.email.toLowerCase()) && getSection(u.email) !== "OTHER");
   }, [users, assignedEmailsSet]);
 
   const incompleteProfileUsers = useMemo(() => {
