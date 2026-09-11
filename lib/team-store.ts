@@ -55,7 +55,7 @@ export type TeamStore = {
 
 type Unsubscribe = () => void;
 
-const pollIntervalMs = 10000;
+const pollIntervalMs = 30000;
 
 async function getAuthToken() {
   const user = auth.currentUser;

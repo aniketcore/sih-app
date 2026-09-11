@@ -16,14 +16,73 @@ type AdminTeam = Team & {
   }>;
 };
 
+function AdminTeamCard({ t }: { t: AdminTeam }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const hasFemale = t.members.some((m) => m.gender?.toLowerCase() === "female");
+
+  return (
+    <div className="border border-slate-200 bg-white">
+      <div 
+        className="flex flex-col sm:flex-row sm:items-center justify-between p-3 sm:p-4 gap-2 cursor-pointer hover:bg-slate-50 transition-colors"
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-slate-400 text-xs">{isExpanded ? "▼" : "▶"}</span>
+            <h3 className="font-bold text-sm sm:text-base leading-tight">{t.name}</h3>
+          </div>
+          <p className="text-xs text-slate-500 break-all ml-4">Leader: {t.ownerEmail}</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5 ml-4 sm:ml-0">
+          <span
+            className={`text-[11px] sm:text-xs px-2 py-0.5 border font-semibold ${
+              hasFemale
+                ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                : "border-amber-300 bg-amber-50 text-amber-800"
+            }`}
+          >
+            {hasFemale ? "✓ SIH Female Requirement Met" : "⚠️ Female Member Missing"}
+          </span>
+          <span className="text-[11px] sm:text-xs border border-slate-200 px-2 py-0.5 text-slate-600 font-medium bg-slate-50">
+            {t.members.length} / 6 Members
+          </span>
+        </div>
+      </div>
+
+      {isExpanded && (
+        <div className="divide-y divide-slate-100 text-xs border-t border-slate-100 px-3 sm:px-4 pb-1">
+          {t.members.map((m, idx) => (
+            <div key={m.email || idx} className="py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-2 pl-4">
+              <div className="break-all">
+                <span className="font-semibold text-slate-900">{m.name ?? "N/A"}</span>{" "}
+                <span className="text-slate-500">({m.email})</span>
+              </div>
+              <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-slate-600">
+                <span>Reg: {m.regNo ?? "N/A"}</span>
+                <span>Branch: {m.branch ?? "N/A"}</span>
+                <span>Gender: {m.gender ?? "N/A"}</span>
+                <span>Phone: {m.phone ?? "N/A"}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AdminDashboardPage() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [teams, setTeams] = useState<AdminTeam[]>([]);
-  const [tab, setTab] = useState<"teams" | "users" | "unassigned" | "incomplete">("teams");
+  const [mainTab, setMainTab] = useState<"teams" | "users">("teams");
+  const [userTab, setUserTab] = useState<string>("all");
+  const [teamTab, setTeamTab] = useState<string>("all");
   const [search, setSearch] = useState("");
+
+  const KNOWN_SECTIONS = ["IT","ME","CY","CR","CE","CA", "AD", "EC", "EE", "CS"];
 
   async function loadAdminData() {
     try {
@@ -72,9 +131,71 @@ export default function AdminDashboardPage() {
     });
   }, [users]);
 
+  function getSection(email: string) {
+    const normalized = email.trim().toLowerCase();
+    if (normalized.startsWith("2026pcea")) {
+      const section = normalized.substring(8, 10).toUpperCase();
+      if (KNOWN_SECTIONS.includes(section)) return section;
+    }
+    return "OTHER";
+  }
+
+  const counts = useMemo(() => {
+    const c: Record<string, number> = {
+      all: users.length,
+      unassigned: unassignedUsers.length,
+      incomplete: incompleteProfileUsers.length,
+      OTHER: 0,
+    };
+    KNOWN_SECTIONS.forEach((s) => (c[s] = 0));
+    users.forEach((u) => {
+      const sec = getSection(u.email);
+      if (c[sec] !== undefined) c[sec]++;
+      else c["OTHER"]++;
+    });
+    return c;
+  }, [users, unassignedUsers, incompleteProfileUsers]);
+
+  const teamCounts = useMemo(() => {
+    let complete = 0;
+    let incomplete = 0;
+    let valid = 0;
+    let invalid = 0;
+    let multipleFemales = 0;
+
+    teams.forEach((t) => {
+      let femaleCount = 0;
+      t.members.forEach((m) => {
+        if (m.gender?.toLowerCase() === "female") femaleCount++;
+      });
+      
+      const hasFemale = femaleCount > 0;
+      if (t.members.length >= 6) complete++;
+      else incomplete++;
+
+      if (hasFemale) valid++;
+      else invalid++;
+      
+      if (femaleCount > 1) multipleFemales++;
+    });
+
+    return {
+      all: teams.length,
+      complete,
+      incomplete,
+      valid,
+      invalid,
+      multipleFemales,
+    };
+  }, [teams]);
+
   // Search filter
   const filteredUsers = useMemo(() => {
-    const list = tab === "unassigned" ? unassignedUsers : tab === "incomplete" ? incompleteProfileUsers : users;
+    let list = users;
+    if (userTab === "unassigned") list = unassignedUsers;
+    else if (userTab === "incomplete") list = incompleteProfileUsers;
+    else if (userTab !== "all") list = users.filter((u) => getSection(u.email) === userTab);
+    
     if (!search.trim()) return list;
     const q = search.toLowerCase().trim();
     return list.filter(
@@ -85,12 +206,19 @@ export default function AdminDashboardPage() {
         u.phone?.toLowerCase().includes(q) ||
         u.branch?.toLowerCase().includes(q),
     );
-  }, [users, unassignedUsers, incompleteProfileUsers, tab, search]);
+  }, [users, unassignedUsers, incompleteProfileUsers, userTab, search]);
 
   const filteredTeams = useMemo(() => {
-    if (!search.trim()) return teams;
+    let list = teams;
+    if (teamTab === "complete") list = teams.filter((t) => t.members.length >= 6);
+    else if (teamTab === "incomplete") list = teams.filter((t) => t.members.length < 6);
+    else if (teamTab === "valid") list = teams.filter((t) => t.members.some((m) => m.gender?.toLowerCase() === "female"));
+    else if (teamTab === "invalid") list = teams.filter((t) => !t.members.some((m) => m.gender?.toLowerCase() === "female"));
+    else if (teamTab === "multipleFemales") list = teams.filter((t) => t.members.filter(m => m.gender?.toLowerCase() === "female").length > 1);
+
+    if (!search.trim()) return list;
     const q = search.toLowerCase().trim();
-    return teams.filter(
+    return list.filter(
       (t) =>
         t.name.toLowerCase().includes(q) ||
         t.ownerEmail.toLowerCase().includes(q) ||
@@ -101,7 +229,7 @@ export default function AdminDashboardPage() {
             m.regNo?.toLowerCase().includes(q),
         ),
     );
-  }, [teams, search]);
+  }, [teams, teamTab, search]);
 
   function exportCSV() {
     const headers = ["Name", "Email", "Phone", "Reg No", "Branch", "Gender", "Profile Complete", "Team Assigned"];
@@ -181,111 +309,157 @@ export default function AdminDashboardPage() {
           </div>
         </div>
 
-        {/* Filter Tabs & Search Controls */}
-        <div className="flex flex-col gap-2.5 border-b border-slate-200 pb-3">
-          <div className="w-full">
-            <input
-              type="text"
-              placeholder="Search name, email, reg no, phone..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full border border-slate-300 text-xs px-3 py-2 outline-none focus:border-black bg-white"
-            />
-          </div>
+        {/* Main Tabs */}
+        <div className="flex items-center gap-4 border-b border-slate-200">
+          <button
+            className={`pb-3 pt-1 px-1 text-sm font-semibold transition-colors border-b-2 ${
+              mainTab === "teams" ? "border-black text-black" : "border-transparent text-slate-500 hover:text-black"
+            }`}
+            onClick={() => setMainTab("teams")}
+            type="button"
+          >
+            Teams ({teams.length})
+          </button>
+          <button
+            className={`pb-3 pt-1 px-1 text-sm font-semibold transition-colors border-b-2 ${
+              mainTab === "users" ? "border-black text-black" : "border-transparent text-slate-500 hover:text-black"
+            }`}
+            onClick={() => setMainTab("users")}
+            type="button"
+          >
+            Users Directory ({users.length})
+          </button>
+        </div>
 
-          <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-1.5">
-            <button
-              className={`border px-3 py-2 sm:py-1.5 text-xs font-semibold text-center ${
-                tab === "teams" ? "border-black bg-black text-white" : "border-slate-300 text-slate-700 bg-white"
-              }`}
-              onClick={() => setTab("teams")}
-              type="button"
-            >
-              Teams ({teams.length})
-            </button>
-            <button
-              className={`border px-3 py-2 sm:py-1.5 text-xs font-semibold text-center ${
-                tab === "users" ? "border-black bg-black text-white" : "border-slate-300 text-slate-700 bg-white"
-              }`}
-              onClick={() => setTab("users")}
-              type="button"
-            >
-              All Users ({users.length})
-            </button>
-            <button
-              className={`border px-3 py-2 sm:py-1.5 text-xs font-semibold text-center ${
-                tab === "unassigned" ? "border-amber-600 bg-amber-600 text-white" : "border-amber-300 text-amber-800 bg-amber-50"
-              }`}
-              onClick={() => setTab("unassigned")}
-              type="button"
-            >
-              Unassigned ({unassignedUsers.length})
-            </button>
-            <button
-              className={`border px-3 py-2 sm:py-1.5 text-xs font-semibold text-center ${
-                tab === "incomplete" ? "border-red-600 bg-red-600 text-white" : "border-red-300 text-red-800 bg-red-50"
-              }`}
-              onClick={() => setTab("incomplete")}
-              type="button"
-            >
-              Incomplete ({incompleteProfileUsers.length})
-            </button>
-          </div>
+        {/* Search Controls */}
+        <div className="flex flex-col gap-3 pb-2">
+          <input
+            type="text"
+            placeholder="Search name, email, reg no, phone..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full border border-slate-300 text-xs px-3 py-2 outline-none focus:border-black bg-white shadow-sm"
+          />
+
+          {mainTab === "users" && (
+            <div className="flex flex-col gap-2 pt-1">
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  { id: "all", label: "All Users" },
+                  { id: "unassigned", label: "Unassigned" },
+                  { id: "incomplete", label: "Incomplete" },
+                ].map((tab) => {
+                  const isActive = userTab === tab.id;
+                  let activeClasses = "border-black bg-black text-white";
+                  if (isActive && tab.id === "unassigned") activeClasses = "border-amber-600 bg-amber-600 text-white";
+                  if (isActive && tab.id === "incomplete") activeClasses = "border-red-600 bg-red-600 text-white";
+
+                  return (
+                    <button
+                      key={tab.id}
+                      className={`border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                        isActive ? activeClasses : "border-slate-300 text-slate-600 hover:bg-slate-50 bg-white"
+                      }`}
+                      onClick={() => setUserTab(tab.id)}
+                      type="button"
+                    >
+                      {tab.label} ({counts[tab.id] || 0})
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  ...KNOWN_SECTIONS.map((sec) => ({ id: sec, label: sec })),
+                  { id: "OTHER", label: "Other" },
+                ].map((tab) => {
+                  const isActive = userTab === tab.id;
+                  const activeClasses = "border-black bg-black text-white";
+
+                  return (
+                    <button
+                      key={tab.id}
+                      className={`border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                        isActive ? activeClasses : "border-slate-300 text-slate-600 hover:bg-slate-50 bg-white"
+                      }`}
+                      onClick={() => setUserTab(tab.id)}
+                      type="button"
+                    >
+                      {tab.label} ({counts[tab.id] || 0})
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {mainTab === "teams" && (
+            <div className="flex flex-col gap-2 pt-1">
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  { id: "all", label: "All Teams" },
+                  { id: "complete", label: "Complete (6 Members)" },
+                  { id: "incomplete", label: "Incomplete (<6 Members)" },
+                ].map((tab) => {
+                  const isActive = teamTab === tab.id;
+                  let activeClasses = "border-black bg-black text-white";
+                  if (isActive && tab.id === "incomplete") activeClasses = "border-amber-600 bg-amber-600 text-white";
+                  if (isActive && tab.id === "complete") activeClasses = "border-emerald-600 bg-emerald-600 text-white";
+
+                  return (
+                    <button
+                      key={tab.id}
+                      className={`border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                        isActive ? activeClasses : "border-slate-300 text-slate-600 hover:bg-slate-50 bg-white"
+                      }`}
+                      onClick={() => setTeamTab(tab.id)}
+                      type="button"
+                    >
+                      {tab.label} ({(teamCounts as any)[tab.id] || 0})
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  { id: "valid", label: "Valid (Has Female)" },
+                  { id: "invalid", label: "Invalid (No Female)" },
+                  { id: "multipleFemales", label: "Multiple Females" },
+                ].map((tab) => {
+                  const isActive = teamTab === tab.id;
+                  let activeClasses = "border-black bg-black text-white";
+                  if (isActive && tab.id === "invalid") activeClasses = "border-amber-600 bg-amber-600 text-white";
+                  if (isActive && (tab.id === "valid" || tab.id === "multipleFemales")) activeClasses = "border-emerald-600 bg-emerald-600 text-white";
+
+                  return (
+                    <button
+                      key={tab.id}
+                      className={`border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                        isActive ? activeClasses : "border-slate-300 text-slate-600 hover:bg-slate-50 bg-white"
+                      }`}
+                      onClick={() => setTeamTab(tab.id)}
+                      type="button"
+                    >
+                      {tab.label} ({(teamCounts as any)[tab.id] || 0})
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Content Section */}
-        {tab === "teams" ? (
+        {mainTab === "teams" ? (
           <div className="space-y-3">
             {filteredTeams.length === 0 ? (
               <div className="border border-slate-200 p-6 text-center text-xs text-slate-400 bg-white">
                 No matching teams found.
               </div>
             ) : (
-              filteredTeams.map((t) => {
-                const hasFemale = t.members.some((m) => m.gender?.toLowerCase() === "female");
-
-                return (
-                  <div key={t.id} className="border border-slate-200 p-3 sm:p-4 space-y-3 bg-white">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-2 gap-2">
-                      <div>
-                        <h3 className="font-bold text-sm sm:text-base leading-tight">{t.name}</h3>
-                        <p className="text-xs text-slate-500 break-all">Leader: {t.ownerEmail}</p>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span
-                          className={`text-[11px] sm:text-xs px-2 py-0.5 border font-semibold ${
-                            hasFemale
-                              ? "border-emerald-300 bg-emerald-50 text-emerald-700"
-                              : "border-amber-300 bg-amber-50 text-amber-800"
-                          }`}
-                        >
-                          {hasFemale ? "✓ SIH Female Requirement Met" : "⚠️ Female Member Missing"}
-                        </span>
-                        <span className="text-[11px] sm:text-xs border border-slate-200 px-2 py-0.5 text-slate-600 font-medium bg-slate-50">
-                          {t.members.length} / 6 Members
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="divide-y divide-slate-100 text-xs">
-                      {t.members.map((m, idx) => (
-                        <div key={m.email || idx} className="py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-2">
-                          <div className="break-all">
-                            <span className="font-semibold text-slate-900">{m.name ?? "N/A"}</span>{" "}
-                            <span className="text-slate-500">({m.email})</span>
-                          </div>
-                          <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-slate-600">
-                            <span>Reg: {m.regNo ?? "N/A"}</span>
-                            <span>Branch: {m.branch ?? "N/A"}</span>
-                            <span>Gender: {m.gender ?? "N/A"}</span>
-                            <span>Phone: {m.phone ?? "N/A"}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })
+              filteredTeams.map((t) => (
+                <AdminTeamCard key={t.id} t={t} />
+              ))
             )}
           </div>
         ) : (
@@ -306,6 +480,7 @@ export default function AdminDashboardPage() {
                         <div>
                           <div className="font-bold text-slate-900">{u.name ?? "Name Pending"}</div>
                           <div className="text-slate-500 text-[11px] break-all">{u.email}</div>
+                          <div className="mt-0.5 inline-block bg-slate-100 text-slate-600 px-1.5 py-0.5 text-[9px] font-bold rounded-sm border border-slate-200">{getSection(u.email)}</div>
                         </div>
                         <div className="flex flex-col items-end gap-1">
                           {!u.isComplete && (
@@ -344,6 +519,7 @@ export default function AdminDashboardPage() {
                   <tr>
                     <th className="p-3 font-semibold">Name</th>
                     <th className="p-3 font-semibold">Email</th>
+                    <th className="p-3 font-semibold">Section</th>
                     <th className="p-3 font-semibold">Phone</th>
                     <th className="p-3 font-semibold">Reg No.</th>
                     <th className="p-3 font-semibold">Branch</th>
@@ -366,6 +542,7 @@ export default function AdminDashboardPage() {
                         <tr key={u.id}>
                           <td className="p-3 font-medium text-slate-900">{u.name ?? "N/A"}</td>
                           <td className="p-3 text-slate-600">{u.email}</td>
+                          <td className="p-3 text-slate-600"><span className="bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded-sm font-bold text-[10px]">{getSection(u.email)}</span></td>
                           <td className="p-3 text-slate-600">{u.phone ?? "N/A"}</td>
                           <td className="p-3 text-slate-600">{u.regNo ?? "N/A"}</td>
                           <td className="p-3 text-slate-600">{u.branch ?? "N/A"}</td>
