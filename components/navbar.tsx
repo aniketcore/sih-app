@@ -5,11 +5,24 @@ import Link from "next/link";
 import { subscribeAuth, type AuthUser } from "../lib/auth";
 import { auth } from "../lib/firebase";
 import { signOut } from "firebase/auth";
+import { teamStore } from "../lib/team-store";
 
 export function Navbar() {
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
-  useEffect(() => subscribeAuth((nextUser) => setUser(nextUser)), []);
+  useEffect(() => {
+    return subscribeAuth((nextUser) => {
+      setUser(nextUser);
+      if (nextUser) {
+        teamStore.getUserProfile().then((res) => {
+          setIsAdmin(res.user?.isAdmin || false);
+        }).catch(console.error);
+      } else {
+        setIsAdmin(false);
+      }
+    });
+  }, []);
 
   if (!user) return null;
 
@@ -24,9 +37,11 @@ export function Navbar() {
           <Link className="text-slate-600 hover:text-black" href="/team">
             Team
           </Link>
-          <Link className="text-slate-600 hover:text-black" href="/admin">
-            Admin
-          </Link>
+          {isAdmin && (
+            <Link className="text-slate-600 hover:text-black" href="/admin">
+              Admin
+            </Link>
+          )}
           <button
             className="text-xs text-slate-500 underline hover:text-slate-800"
             onClick={() => signOut(auth)}
@@ -39,5 +54,3 @@ export function Navbar() {
     </header>
   );
 }
-
-
