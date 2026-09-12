@@ -138,7 +138,7 @@ export async function POST(request: NextRequest) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = (await request.Response.json()) as {
+    const body = (await request.json()) as {
       teamId: string;
       teamName: string;
       fromUid: string;
@@ -240,7 +240,7 @@ export async function PATCH(request: NextRequest) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = (await request.Response.json()) as { inviteId: string; userId: string; userEmail: string };
+    const body = (await request.json()) as { inviteId: string; userId: string; userEmail: string };
 
     if (body.userId !== user.uid || normalizeEmail(body.userEmail) !== normalizeEmail(user.email)) {
       return Response.json({ error: "Forbidden" }, { status: 403 });
@@ -289,9 +289,13 @@ export async function PATCH(request: NextRequest) {
 
     // Atomic D1 batch: Add member and clear pending invites in one atomic execution
     await env.sih_app_db.batch([
-      env.sih_app_db.prepare(
-        "INSERT INTO team_members (team_id, user_id, email, photo_url, joined_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(team_id, user_id) DO UPDATE SET email = excluded.email, photo_url = excluded.photo_url",
-      ).bind(invite.team_id, user.uid, normalizeEmail(user.email), user.photoUrl ?? null, Date.now()),
+        env.sih_app_db
+          .prepare(`
+            INSERT INTO team_members (team_id, user_id, email, photo_url, joined_at)
+            SELECT ?, ?, ?, ?, ?
+            WHERE (SELECT COUNT(*) FROM team_members WHERE team_id = ?) < 6
+          `)
+          .bind(invite.team_id, user.uid, normalizeEmail(user.email), user.photoUrl ?? null, Date.now(), invite.team_id),
       env.sih_app_db.prepare("DELETE FROM team_invites WHERE to_email = ?").bind(normalizeEmail(user.email)),
     ]);
 

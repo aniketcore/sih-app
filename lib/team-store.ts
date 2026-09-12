@@ -37,9 +37,9 @@ export type UserProfile = {
 };
 
 export type TeamStore = {
-  watchOwnedTeams: (userId: string, onChange: (teams: Team[]) => void) => Unsubscribe;
-  watchInvites: (email: string, onChange: (invites: Invite[]) => void) => Unsubscribe;
-  watchOutgoingInvites: (teamId: string, onChange: (invites: Invite[]) => void) => Unsubscribe;
+  watchOwnedTeams: (userId: string, onChange: (teams: Team[]) => void, options?: { disablePolling?: boolean }) => Unsubscribe;
+  watchInvites: (email: string, onChange: (invites: Invite[]) => void, options?: { disablePolling?: boolean }) => Unsubscribe;
+  watchOutgoingInvites: (teamId: string, onChange: (invites: Invite[]) => void, options?: { disablePolling?: boolean }) => Unsubscribe;
   getUserProfile: () => Promise<{ isFrozen: boolean; isLeadersOnlyLogin: boolean; isLeader: boolean; user: UserProfile | null }>;
   getAdminOverview: () => Promise<{ isFrozen: boolean; users: UserProfile[]; teams: Array<Team & { createdAt: number }> } | null>;
   saveUserProfile: (input: { name: string; phone: string; regNo: string; gender: string; branch: string }) => Promise<void>;
@@ -88,7 +88,7 @@ async function requestJson<T>(input: RequestInfo, init?: RequestInit) {
   return payload;
 }
 
-function watchList<T>(urlFactory: () => string, key: string, onChange: (items: T[]) => void): Unsubscribe {
+function watchList<T>(urlFactory: () => string, key: string, onChange: (items: T[]) => void, options?: { disablePolling?: boolean }): Unsubscribe {
   let cancelled = false;
 
   async function refresh() {
@@ -102,25 +102,28 @@ function watchList<T>(urlFactory: () => string, key: string, onChange: (items: T
 
   void refresh();
 
-  const interval = window.setInterval(refresh, pollIntervalMs);
+  let interval: number | undefined;
+  if (!options?.disablePolling) {
+    interval = window.setInterval(refresh, pollIntervalMs);
+  }
 
   return () => {
     cancelled = true;
-    window.clearInterval(interval);
+    if (interval !== undefined) window.clearInterval(interval);
   };
 }
 
 export const teamStore: TeamStore = {
-  watchOwnedTeams(userId, onChange) {
-    return watchList<Team>(() => `/api/teams?userId=${encodeURIComponent(userId)}`, "teams", onChange);
+  watchOwnedTeams(userId, onChange, options) {
+    return watchList<Team>(() => `/api/teams?userId=${encodeURIComponent(userId)}`, "teams", onChange, options);
   },
 
-  watchInvites(email, onChange) {
-    return watchList<Invite>(() => `/api/invites?email=${encodeURIComponent(normalizeEmail(email))}`, "invites", onChange);
+  watchInvites(email, onChange, options) {
+    return watchList<Invite>(() => `/api/invites?email=${encodeURIComponent(normalizeEmail(email))}`, "invites", onChange, options);
   },
 
-  watchOutgoingInvites(teamId, onChange) {
-    return watchList<Invite>(() => `/api/invites?teamId=${encodeURIComponent(teamId)}`, "outgoingInvites", onChange);
+  watchOutgoingInvites(teamId, onChange, options) {
+    return watchList<Invite>(() => `/api/invites?teamId=${encodeURIComponent(teamId)}`, "outgoingInvites", onChange, options);
   },
 
   async getUserProfile() {

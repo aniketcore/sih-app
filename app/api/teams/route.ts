@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = (await request.Response.json()) as { name: string; ownerUid: string; ownerEmail: string };
+    const body = (await request.json()) as { name: string; ownerUid: string; ownerEmail: string };
     const name = body.name?.trim();
 
     if (!name) {
@@ -156,7 +156,7 @@ export async function PATCH(request: NextRequest) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = (await request.Response.json()) as { teamId: string; name: string };
+    const body = (await request.json()) as { teamId: string; name: string };
     const name = body.name?.trim();
 
     if (!name) {

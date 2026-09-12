@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = (await request.Response.json()) as {
+    const body = (await request.json()) as {
       uid: string;
       email: string;
       name?: string;

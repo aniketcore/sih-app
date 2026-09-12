@@ -124,15 +124,6 @@ export async function ensureSchema() {
             value TEXT NOT NULL
           )
         `),
-        env.sih_app_db.prepare(`
-          CREATE TRIGGER IF NOT EXISTS enforce_team_limit
-          BEFORE INSERT ON team_members
-          FOR EACH ROW
-          WHEN (SELECT COUNT(*) FROM team_members WHERE team_id = NEW.team_id) >= 6
-          BEGIN
-            SELECT RAISE(ABORT, 'Team is already full (maximum 6 members)');
-          END;
-        `),
       ]);
 
       try { await env.sih_app_db.prepare("INSERT OR IGNORE INTO admins (email, created_at) VALUES ('2025pceacsaniket25@poornima.org', 1700000000)").run(); } catch {}
@@ -176,9 +167,11 @@ export async function isAdmin(email: string): Promise<boolean> {
 }
 
 export async function getIsFrozen(): Promise<boolean> {
+  const freezeKey = process.env.FREEZE_CONFIG_KEY || 'is_frozen';
   try {
     const result = await env.sih_app_db
-      .prepare("SELECT value FROM settings WHERE key = 'is_frozen'")
+      .prepare("SELECT value FROM settings WHERE key = ?")
+      .bind(freezeKey)
       .first<{ value: string }>();
     return result?.value === "true";
   } catch (cause: any) {
@@ -200,10 +193,11 @@ export async function getIsLeadersOnlyLogin(): Promise<boolean> {
 }
 
 export async function setIsFrozen(frozen: boolean): Promise<void> {
+  const freezeKey = process.env.FREEZE_CONFIG_KEY || 'is_frozen';
   try {
     await env.sih_app_db
-      .prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('is_frozen', ?)")
-      .bind(frozen ? "true" : "false")
+      .prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)")
+      .bind(freezeKey, frozen ? "true" : "false")
       .run();
   } catch (cause: any) {
     console.error("[DB setIsFrozen Error]", cause, cause?.cause);
@@ -267,9 +261,12 @@ export async function upsertTeamMember(teamId: string, userId: string, email: st
   try {
     await env.sih_app_db
       .prepare(
-        "INSERT INTO team_members (team_id, user_id, email, photo_url, joined_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(team_id, user_id) DO UPDATE SET email = excluded.email, photo_url = excluded.photo_url",
+        `INSERT INTO team_members (team_id, user_id, email, photo_url, joined_at)
+         SELECT ?, ?, ?, ?, ?
+         WHERE (SELECT COUNT(*) FROM team_members WHERE team_id = ?) < 6
+         ON CONFLICT(team_id, user_id) DO UPDATE SET email = excluded.email, photo_url = excluded.photo_url`,
       )
-      .bind(teamId, userId, normalizeEmail(email), photoUrl ?? null, Date.now())
+      .bind(teamId, userId, normalizeEmail(email), photoUrl ?? null, Date.now(), teamId)
       .run();
   } catch (cause: any) {
     console.error("[DB upsertTeamMember Error]", cause, cause?.cause);
