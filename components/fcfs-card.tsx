@@ -55,7 +55,7 @@ export function FCFSClaimCard({ initialClaimedPs }: { initialClaimedPs?: string 
         body: JSON.stringify({ psNumber: selectedPs }),
       });
 
-      const data = await res.json();
+      const data = (await res.json()) as any;
 
       if (res.ok && data.success) {
         setStatus("success");

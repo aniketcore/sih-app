@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { subscribeAuth, type AuthUser } from "../../lib/auth";
 import { teamStore, type UserProfile, type Team } from "../../lib/team-store";
 
-type AdminTeam = Team & {
+type AdminTeam = Omit<Team, "members"> & {
   createdAt: number;
   members: Array<{
     email: string;

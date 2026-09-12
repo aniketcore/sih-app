@@ -226,6 +226,29 @@ export async function setIsLeadersOnlyLogin(leadersOnly: boolean): Promise<void>
   }
 }
 
+export async function getIsFCFSEnabled(): Promise<boolean> {
+  try {
+    const result = await env.sih_app_db
+      .prepare("SELECT value FROM settings WHERE key = 'fcfs_enabled'")
+      .first<{ value: string }>();
+    return result?.value === "true";
+  } catch (cause: any) {
+    console.error("[DB getIsFCFSEnabled Error]", cause, cause?.cause);
+    return false;
+  }
+}
+
+export async function setIsFCFSEnabled(enabled: boolean): Promise<void> {
+  try {
+    await env.sih_app_db
+      .prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('fcfs_enabled', ?)")
+      .bind(enabled ? "true" : "false")
+      .run();
+  } catch (cause: any) {
+    console.error("[DB setIsFCFSEnabled Error]", cause, cause?.cause);
+  }
+}
+
 export async function upsertUser(input: {
   uid: string;
   email: string;

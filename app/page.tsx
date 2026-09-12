@@ -13,6 +13,7 @@ export default function ProfilePage() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLeader, setIsLeader] = useState(false);
+  const [isFCFSEnabled, setIsFCFSEnabled] = useState(false);
   const [claimedPs, setClaimedPs] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
@@ -23,6 +24,7 @@ export default function ProfilePage() {
       const p = res.user;
       setProfile(p);
       setIsLeader(res.isLeader);
+      setIsFCFSEnabled(res.isFCFSEnabled);
       setClaimedPs(res.claimedPs);
     } catch (cause) {
       console.error(cause);
@@ -103,7 +105,7 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {isLeader && (
+        {!profile?.isAdmin && isLeader && isFCFSEnabled && (
           <FCFSClaimCard initialClaimedPs={claimedPs} />
         )}
 

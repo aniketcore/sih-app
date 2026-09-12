@@ -40,8 +40,8 @@ export type TeamStore = {
   watchOwnedTeams: (userId: string, onChange: (teams: Team[]) => void, options?: { disablePolling?: boolean }) => Unsubscribe;
   watchInvites: (email: string, onChange: (invites: Invite[]) => void, options?: { disablePolling?: boolean }) => Unsubscribe;
   watchOutgoingInvites: (teamId: string, onChange: (invites: Invite[]) => void, options?: { disablePolling?: boolean }) => Unsubscribe;
-  getUserProfile: () => Promise<{ isFrozen: boolean; isLeadersOnlyLogin: boolean; isLeader: boolean; claimedPs: string | null; user: UserProfile | null }>;
-  getAdminOverview: () => Promise<{ isFrozen: boolean; users: UserProfile[]; teams: Array<Team & { createdAt: number }> } | null>;
+  getUserProfile: () => Promise<{ isFrozen: boolean; isLeadersOnlyLogin: boolean; isFCFSEnabled: boolean; isLeader: boolean; claimedPs: string | null; user: UserProfile | null }>;
+  getAdminOverview: () => Promise<{ isFrozen: boolean; users: UserProfile[]; teams: Array<Omit<Team, "members"> & { createdAt: number; members: Array<{ email: string; name: string | null; phone: string | null; regNo: string | null; gender: string | null; branch: string | null; }> }> } | null>;
   saveUserProfile: (input: { name: string; phone: string; regNo: string; gender: string; branch: string }) => Promise<void>;
   syncUser: (input: { uid: string; email: string; photoUrl?: string | null }) => Promise<void>;
   createTeam: (input: { name: string; ownerUid: string; ownerEmail: string }) => Promise<void>;
@@ -127,12 +127,12 @@ export const teamStore: TeamStore = {
   },
 
   async getUserProfile() {
-    const res = await requestJson<{ isFrozen: boolean; isLeadersOnlyLogin: boolean; isLeader: boolean; claimedPs: string | null; user: UserProfile | null }>("/api/users");
+    const res = await requestJson<{ isFrozen: boolean; isLeadersOnlyLogin: boolean; isFCFSEnabled: boolean; isLeader: boolean; claimedPs: string | null; user: UserProfile | null }>("/api/users");
     return res;
   },
 
   async getAdminOverview() {
-    const res = await requestJson<{ isFrozen: boolean; users: UserProfile[]; teams: Array<Team & { createdAt: number }> }>("/api/admin");
+    const res = await requestJson<{ isFrozen: boolean; users: UserProfile[]; teams: Array<Omit<Team, "members"> & { createdAt: number; members: Array<{ email: string; name: string | null; phone: string | null; regNo: string | null; gender: string | null; branch: string | null; }> }> }>("/api/admin");
     return res;
   },
 

@@ -1,13 +1,9 @@
 import { env } from "cloudflare:workers";
 import { NextRequest } from "next/server";
-import { ensureSchema, getVerifiedUser } from "../db";
+import { ensureSchema, getVerifiedUser, getIsFCFSEnabled } from "../db";
 
 export async function POST(request: NextRequest) {
   try {
-    if (process.env.ENABLE_FCFS !== "true") {
-      return Response.json({ error: "FCFS is currently inactive" }, { status: 403 });
-    }
-
     await ensureSchema();
     const user = await getVerifiedUser(request);
 
@@ -15,7 +11,12 @@ export async function POST(request: NextRequest) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = await request.json().catch(() => ({}));
+    const isFCFSEnabled = await getIsFCFSEnabled();
+    if (!isFCFSEnabled) {
+      return Response.json({ error: "FCFS is currently disabled" }, { status: 403 });
+    }
+
+    const body = (await request.json().catch(() => ({}))) as { psNumber?: string };
     const psNumber = typeof body.psNumber === 'string' ? body.psNumber.trim() : "";
 
     if (!psNumber) {
@@ -29,7 +30,7 @@ export async function POST(request: NextRequest) {
       .first();
 
     if (!isLeader) {
-      return Response.json({ error: "Only Team Leaders can participate" }, { status: 403 });
+      return Response.json({ error: "Only Team Leaders can select PS" }, { status: 403 });
     }
     
     // ATOMIC INSERT WITH COUNT CHECK & TEAM LIMIT CHECK
