@@ -85,29 +85,36 @@ export async function GET(request: NextRequest) {
       members: membersByTeamId.get(t.id) || [],
     }));
 
-    return Response.json({
-      isFrozen: await getIsFrozen(),
-      users: usersResult.results.map((u) => {
-        const name = u.name?.trim() || null;
-        const phone = u.phone?.trim() || null;
-        const regNo = u.reg_no?.trim() || null;
-        const gender = u.gender?.trim() || null;
-        const branch = u.branch?.trim() || null;
+    return Response.json(
+      {
+        isFrozen: await getIsFrozen(),
+        users: usersResult.results.map((u) => {
+          const name = u.name?.trim() || null;
+          const phone = u.phone?.trim() || null;
+          const regNo = u.reg_no?.trim() || null;
+          const gender = u.gender?.trim() || null;
+          const branch = u.branch?.trim() || null;
 
-        return {
-          id: u.id,
-          email: u.email,
-          name,
-          phone,
-          regNo,
-          gender,
-          branch,
-          createdAt: u.created_at,
-          isComplete: Boolean(name && phone && regNo && gender && branch),
-        };
-      }),
-      teams,
-    });
+          return {
+            id: u.id,
+            email: u.email,
+            name,
+            phone,
+            regNo,
+            gender,
+            branch,
+            createdAt: u.created_at,
+            isComplete: Boolean(name && phone && regNo && gender && branch),
+          };
+        }),
+        teams,
+      },
+      {
+        headers: {
+          "Cache-Control": "public, s-maxage=60, stale-while-revalidate=30",
+        },
+      }
+    );
   } catch (cause) {
     console.error("[GET /api/admin error]", cause);
     return Response.json({ error: "Failed to load admin data" }, { status: 500 });
