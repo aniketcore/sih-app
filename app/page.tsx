@@ -105,7 +105,7 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {!profile?.isAdmin && isLeader && isFCFSEnabled && (
+        {(profile?.isAdmin || isLeader) && isFCFSEnabled && (
           <FCFSClaimCard initialClaimedPs={claimedPs} />
         )}
 

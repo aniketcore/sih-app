@@ -13,6 +13,7 @@ export function FCFSClaimCard({ initialClaimedPs }: { initialClaimedPs?: string 
   const [search, setSearch] = useState("");
   const [selectedPs, setSelectedPs] = useState<string | null>(initialClaimedPs || null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   // If successfully claimed, lock it down
   useEffect(() => {
@@ -42,6 +43,7 @@ export function FCFSClaimCard({ initialClaimedPs }: { initialClaimedPs?: string 
     setLoading(true);
     setStatus("idle");
     setMessage(null);
+    setShowConfirm(false);
 
     try {
       const token = await auth.currentUser?.getIdToken();
@@ -107,7 +109,10 @@ export function FCFSClaimCard({ initialClaimedPs }: { initialClaimedPs?: string 
                 onChange={(e) => {
                   setSearch(e.target.value);
                   setIsDropdownOpen(true);
-                  if (selectedPs) setSelectedPs(null);
+                  if (selectedPs) {
+                    setSelectedPs(null);
+                    setShowConfirm(false);
+                  }
                 }}
                 onFocus={() => setIsDropdownOpen(true)}
                 className="w-full border border-slate-300 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
@@ -139,15 +144,39 @@ export function FCFSClaimCard({ initialClaimedPs }: { initialClaimedPs?: string 
               )}
             </div>
 
-            <div className="flex justify-end pt-2">
-              <button
-                onClick={handleClaim}
-                disabled={!selectedPs || loading}
-                className="border border-slate-300 bg-slate-50 px-4 py-2 text-xs font-medium text-slate-800 hover:bg-slate-100 disabled:opacity-50"
-              >
-                {loading ? "Locking..." : "Lock PS"}
-              </button>
-            </div>
+            {showConfirm ? (
+              <div className="p-3 bg-red-50 border border-red-200 mt-4">
+                <p className="text-xs font-semibold text-red-800 mb-3">
+                  ⚠️ WARNING: You will be unable to deselect or change this Problem Statement later. This action is final!
+                </p>
+                <div className="flex justify-end gap-2">
+                  <button
+                    onClick={() => setShowConfirm(false)}
+                    disabled={loading}
+                    className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-900 font-medium"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleClaim}
+                    disabled={loading}
+                    className="bg-red-600 text-white px-3 py-1.5 text-xs font-medium hover:bg-red-700 disabled:opacity-50"
+                  >
+                    {loading ? "Locking..." : "Confirm & Lock PS"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex justify-end pt-2">
+                <button
+                  onClick={() => setShowConfirm(true)}
+                  disabled={!selectedPs || loading}
+                  className="border border-slate-300 bg-slate-50 px-4 py-2 text-xs font-medium text-slate-800 hover:bg-slate-100 disabled:opacity-50"
+                >
+                  Lock PS
+                </button>
+              </div>
+            )}
           </div>
         )}
 
