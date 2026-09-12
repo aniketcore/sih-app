@@ -7,10 +7,13 @@ import { teamStore, type UserProfile } from "../lib/team-store";
 import { ProfileOnboardingModal } from "../components/profile-modal";
 import { EditProfileModal } from "../components/edit-profile-modal";
 import { FirstYearWarningBanner } from "../components/year-warning";
+import { FCFSClaimCard } from "../components/fcfs-card";
 
 export default function ProfilePage() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [isLeader, setIsLeader] = useState(false);
+  const [claimedPs, setClaimedPs] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
 
@@ -19,6 +22,8 @@ export default function ProfilePage() {
       const res = await teamStore.getUserProfile();
       const p = res.user;
       setProfile(p);
+      setIsLeader(res.isLeader);
+      setClaimedPs(res.claimedPs);
     } catch (cause) {
       console.error(cause);
     }
@@ -97,6 +102,10 @@ export default function ProfilePage() {
             <span className="font-mono text-xs text-slate-600">{user.uid}</span>
           </div>
         </div>
+
+        {isLeader && (
+          <FCFSClaimCard initialClaimedPs={claimedPs} />
+        )}
 
         <div className="pt-2">
           <Link

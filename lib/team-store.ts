@@ -40,7 +40,7 @@ export type TeamStore = {
   watchOwnedTeams: (userId: string, onChange: (teams: Team[]) => void, options?: { disablePolling?: boolean }) => Unsubscribe;
   watchInvites: (email: string, onChange: (invites: Invite[]) => void, options?: { disablePolling?: boolean }) => Unsubscribe;
   watchOutgoingInvites: (teamId: string, onChange: (invites: Invite[]) => void, options?: { disablePolling?: boolean }) => Unsubscribe;
-  getUserProfile: () => Promise<{ isFrozen: boolean; isLeadersOnlyLogin: boolean; isLeader: boolean; user: UserProfile | null }>;
+  getUserProfile: () => Promise<{ isFrozen: boolean; isLeadersOnlyLogin: boolean; isLeader: boolean; claimedPs: string | null; user: UserProfile | null }>;
   getAdminOverview: () => Promise<{ isFrozen: boolean; users: UserProfile[]; teams: Array<Team & { createdAt: number }> } | null>;
   saveUserProfile: (input: { name: string; phone: string; regNo: string; gender: string; branch: string }) => Promise<void>;
   syncUser: (input: { uid: string; email: string; photoUrl?: string | null }) => Promise<void>;
@@ -127,7 +127,7 @@ export const teamStore: TeamStore = {
   },
 
   async getUserProfile() {
-    const res = await requestJson<{ isFrozen: boolean; isLeadersOnlyLogin: boolean; isLeader: boolean; user: UserProfile | null }>("/api/users");
+    const res = await requestJson<{ isFrozen: boolean; isLeadersOnlyLogin: boolean; isLeader: boolean; claimedPs: string | null; user: UserProfile | null }>("/api/users");
     return res;
   },
 

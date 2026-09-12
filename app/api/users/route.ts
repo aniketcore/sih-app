@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const [row, userIsAdmin, isLeadersOnlyLogin, isLeaderResult] = await Promise.all([
+    const [row, userIsAdmin, isLeadersOnlyLogin, isLeaderResult, claimResult] = await Promise.all([
       env.sih_app_db
         .prepare("SELECT id, email, name, phone, reg_no, gender, branch, photo_url FROM users WHERE id = ?")
         .bind(user.uid)
@@ -20,12 +20,14 @@ export async function GET(request: NextRequest) {
       isAdmin(user.email),
       getIsLeadersOnlyLogin(),
       env.sih_app_db.prepare("SELECT 1 FROM teams WHERE owner_uid = ? LIMIT 1").bind(user.uid).first(),
+      env.sih_app_db.prepare("SELECT resource_id FROM fcfs_claims WHERE user_id = ? LIMIT 1").bind(user.uid).first<{ resource_id: string }>(),
     ]);
 
     return Response.json({
       isFrozen: await getIsFrozen(),
       isLeadersOnlyLogin,
       isLeader: Boolean(isLeaderResult),
+      claimedPs: claimResult?.resource_id || null,
       user: row
         ? {
             id: row.id,

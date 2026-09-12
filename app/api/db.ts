@@ -124,6 +124,17 @@ export async function ensureSchema() {
             value TEXT NOT NULL
           )
         `),
+        env.sih_app_db.prepare(`
+          CREATE TABLE IF NOT EXISTS fcfs_claims (
+            resource_id TEXT NOT NULL,
+            user_id TEXT NOT NULL,
+            claimed_at INTEGER NOT NULL,
+            PRIMARY KEY (resource_id, user_id)
+          )
+        `),
+        env.sih_app_db.prepare(`
+          CREATE INDEX IF NOT EXISTS idx_fcfs_claims_user_id ON fcfs_claims(user_id)
+        `),
       ]);
 
       try { await env.sih_app_db.prepare("INSERT OR IGNORE INTO admins (email, created_at) VALUES ('2025pceacsaniket25@poornima.org', 1700000000)").run(); } catch {}
