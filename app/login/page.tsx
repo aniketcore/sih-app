@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { subscribeAuth, signInWithGoogle, signInWithEmail, createUserWithEmail, type AuthUser } from "../../lib/auth";
 
-const isDev = process.env.NODE_ENV === "development";
+const isEmailAuthEnabled = import.meta.env.VITE_ENABLE_EMAIL_AUTH === "true";
 
 export default function LoginPage() {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -80,7 +80,7 @@ export default function LoginPage() {
             Sign in with Poornima Google Account (@poornima.org)
           </button>
 
-          {isDev ? (
+          {isEmailAuthEnabled ? (
             <div className="space-y-3 border-t border-slate-200 pt-4">
               <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Dev Email Auth</p>
               <input

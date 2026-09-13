@@ -22,6 +22,8 @@ export async function GET(request: NextRequest) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const isFrozen = await getIsFrozen();
+
     const result = await env.sih_app_db
       .prepare(
         `
@@ -67,7 +69,9 @@ export async function GET(request: NextRequest) {
       }),
     );
 
-    return Response.json({ teams });
+    return Response.json({ teams }, {
+      headers: isFrozen ? { "Cache-Control": "public, max-age=300" } : undefined
+    });
   } catch (cause: any) {
     console.error("[GET /api/teams error]", cause, cause?.cause);
     return Response.json({ error: "Failed to fetch teams" }, { status: 500 });

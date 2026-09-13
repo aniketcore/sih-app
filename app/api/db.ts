@@ -135,6 +135,15 @@ export async function ensureSchema() {
         env.sih_app_db.prepare(`
           CREATE INDEX IF NOT EXISTS idx_fcfs_claims_user_id ON fcfs_claims(user_id)
         `),
+        env.sih_app_db.prepare(`
+          CREATE INDEX IF NOT EXISTS idx_team_members_user_id ON team_members(user_id)
+        `),
+        env.sih_app_db.prepare(`
+          CREATE INDEX IF NOT EXISTS idx_team_invites_team_id ON team_invites(team_id)
+        `),
+        env.sih_app_db.prepare(`
+          CREATE INDEX IF NOT EXISTS idx_team_invites_to_email ON team_invites(to_email)
+        `),
       ]);
 
       try { await env.sih_app_db.prepare("INSERT OR IGNORE INTO admins (email, created_at) VALUES ('2025pceacsaniket25@poornima.org', 1700000000)").run(); } catch {}
@@ -167,7 +176,7 @@ export async function isAdmin(email: string): Promise<boolean> {
   try {
     const normalized = normalizeEmail(email);
     const result = await env.sih_app_db
-      .prepare("SELECT 1 FROM admins WHERE LOWER(email) = LOWER(?) LIMIT 1")
+      .prepare("SELECT 1 FROM admins WHERE email = ? LIMIT 1")
       .bind(normalized)
       .first();
     return Boolean(result);
@@ -227,9 +236,11 @@ export async function setIsLeadersOnlyLogin(leadersOnly: boolean): Promise<void>
 }
 
 export async function getIsFCFSEnabled(): Promise<boolean> {
+  const fcfsKey = process.env.FCFS_CONFIG_KEY || 'fcfs_enabled';
   try {
     const result = await env.sih_app_db
-      .prepare("SELECT value FROM settings WHERE key = 'fcfs_enabled'")
+      .prepare("SELECT value FROM settings WHERE key = ?")
+      .bind(fcfsKey)
       .first<{ value: string }>();
     return result?.value === "true";
   } catch (cause: any) {
@@ -239,10 +250,11 @@ export async function getIsFCFSEnabled(): Promise<boolean> {
 }
 
 export async function setIsFCFSEnabled(enabled: boolean): Promise<void> {
+  const fcfsKey = process.env.FCFS_CONFIG_KEY || 'fcfs_enabled';
   try {
     await env.sih_app_db
-      .prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('fcfs_enabled', ?)")
-      .bind(enabled ? "true" : "false")
+      .prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)")
+      .bind(fcfsKey, enabled ? "true" : "false")
       .run();
   } catch (cause: any) {
     console.error("[DB setIsFCFSEnabled Error]", cause, cause?.cause);
