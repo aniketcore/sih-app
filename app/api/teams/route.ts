@@ -43,31 +43,30 @@ export async function GET(request: NextRequest) {
       .bind(userId, userId)
       .all<{ id: string; name: string; owner_email: string; created_at: number }>();
 
-    const teams = await Promise.all(
-      result.results.map(async (teamRow) => {
-        const membersResult = await env.sih_app_db
-          .prepare(
-            `SELECT tm.email, tm.photo_url, u.gender
-             FROM team_members tm
-             LEFT JOIN users u ON u.id = tm.user_id
-             WHERE tm.team_id = ?
-             ORDER BY tm.joined_at ASC`,
-          )
-          .bind(teamRow.id)
-          .all<{ email: string; photo_url?: string | null; gender?: string | null }>();
+    const teams = [];
+    for (const teamRow of result.results) {
+      const membersResult = await env.sih_app_db
+        .prepare(
+          `SELECT tm.email, tm.photo_url, u.gender
+           FROM team_members tm
+           LEFT JOIN users u ON u.id = tm.user_id
+           WHERE tm.team_id = ?
+           ORDER BY tm.joined_at ASC`,
+        )
+        .bind(teamRow.id)
+        .all<{ email: string; photo_url?: string | null; gender?: string | null }>();
 
-        return {
-          id: teamRow.id,
-          name: teamRow.name,
-          ownerEmail: teamRow.owner_email,
-          members: membersResult.results.map((m) => ({
-            email: m.email,
-            photoUrl: m.photo_url ?? undefined,
-            gender: m.gender ?? undefined,
-          })),
-        };
-      }),
-    );
+      teams.push({
+        id: teamRow.id,
+        name: teamRow.name,
+        ownerEmail: teamRow.owner_email,
+        members: membersResult.results.map((m) => ({
+          email: m.email,
+          photoUrl: m.photo_url ?? undefined,
+          gender: m.gender ?? undefined,
+        })),
+      });
+    }
 
     return Response.json({ teams }, {
       headers: isFrozen ? { "Cache-Control": "public, max-age=300" } : undefined

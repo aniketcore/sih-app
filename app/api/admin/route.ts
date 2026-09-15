@@ -77,11 +77,22 @@ export async function GET(request: NextRequest) {
       membersByTeamId.set(m.team_id, list);
     }
 
+    // Fetch all FCFS claims to map to teams
+    const claimsResult = await env.sih_app_db
+      .prepare("SELECT resource_id, user_id FROM fcfs_claims")
+      .all<{ resource_id: string; user_id: string }>();
+    
+    const claimsByUserId = new Map<string, string>();
+    for (const c of claimsResult.results || []) {
+      claimsByUserId.set(c.user_id, c.resource_id);
+    }
+
     const teams = (teamsResult.results || []).map((t) => ({
       id: t.id,
       name: t.name,
       ownerEmail: t.owner_email,
       createdAt: t.created_at,
+      claimedPs: claimsByUserId.get(t.owner_uid) || null,
       members: membersByTeamId.get(t.id) || [],
     }));
 

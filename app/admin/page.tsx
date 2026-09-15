@@ -3,9 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { subscribeAuth, type AuthUser } from "../../lib/auth";
 import { teamStore, type UserProfile, type Team } from "../../lib/team-store";
+import { problemStatements } from "../../lib/problem-statements";
 
 type AdminTeam = Omit<Team, "members"> & {
   createdAt: number;
+  claimedPs?: string | null;
   members: Array<{
     email: string;
     name: string | null;
@@ -35,6 +37,15 @@ function AdminTeamCard({ t }: { t: AdminTeam }) {
           <p className="text-xs text-slate-500 break-all ml-4">Leader: {t.ownerEmail}</p>
         </div>
         <div className="flex flex-wrap items-center gap-1.5 ml-4 sm:ml-0">
+          <span
+            className={`text-[11px] sm:text-xs px-2 py-0.5 border font-semibold ${
+              t.claimedPs
+                ? "border-purple-300 bg-purple-50 text-purple-700"
+                : "border-slate-300 bg-slate-50 text-slate-500"
+            }`}
+          >
+            {t.claimedPs ? `PS: ${t.claimedPs}` : "No PS"}
+          </span>
           <span
             className={`text-[11px] sm:text-xs px-2 py-0.5 border font-semibold ${
               hasFemale
@@ -179,6 +190,10 @@ export default function AdminDashboardPage() {
     let invalid = 0;
     let multipleFemales = 0;
     let moreThan2Females = 0;
+    let withPs = 0;
+    let withoutPs = 0;
+    let hardwarePs = 0;
+    let softwarePs = 0;
 
     teams.forEach((t) => {
       let femaleCount = 0;
@@ -195,6 +210,14 @@ export default function AdminDashboardPage() {
       
       if (femaleCount > 1) multipleFemales++;
       if (femaleCount > 2) moreThan2Females++;
+
+      if (t.claimedPs) {
+        withPs++;
+        const psCategory = problemStatements.find((ps) => ps.ps_number === t.claimedPs)?.category;
+        if (psCategory === "Hardware") hardwarePs++;
+        else if (psCategory === "Software") softwarePs++;
+      }
+      else withoutPs++;
     });
 
     return {
@@ -205,6 +228,10 @@ export default function AdminDashboardPage() {
       invalid,
       multipleFemales,
       moreThan2Females,
+      withPs,
+      withoutPs,
+      hardwarePs,
+      softwarePs,
     };
   }, [teams]);
 
@@ -246,6 +273,10 @@ export default function AdminDashboardPage() {
     else if (teamTab === "invalid") list = teams.filter((t) => !t.members.some((m) => m.gender?.toLowerCase() === "female"));
     else if (teamTab === "multipleFemales") list = teams.filter((t) => t.members.filter(m => m.gender?.toLowerCase() === "female").length > 1);
     else if (teamTab === "moreThan2Females") list = teams.filter((t) => t.members.filter(m => m.gender?.toLowerCase() === "female").length > 2);
+    else if (teamTab === "withPs") list = teams.filter((t) => !!t.claimedPs);
+    else if (teamTab === "withoutPs") list = teams.filter((t) => !t.claimedPs);
+    else if (teamTab === "hardwarePs") list = teams.filter((t) => t.claimedPs && problemStatements.find(ps => ps.ps_number === t.claimedPs)?.category === "Hardware");
+    else if (teamTab === "softwarePs") list = teams.filter((t) => t.claimedPs && problemStatements.find(ps => ps.ps_number === t.claimedPs)?.category === "Software");
 
     if (!search.trim()) return list;
     const q = search.toLowerCase().trim();
@@ -467,11 +498,16 @@ export default function AdminDashboardPage() {
                   { id: "invalid", label: "Invalid (No Female)" },
                   { id: "multipleFemales", label: "Multiple Females" },
                   { id: "moreThan2Females", label: "More Than 2 Females" },
+                  { id: "withPs", label: "With PS" },
+                  { id: "withoutPs", label: "Without PS" },
+                  { id: "hardwarePs", label: "Hardware PS" },
+                  { id: "softwarePs", label: "Software PS" },
                 ].map((tab) => {
                   const isActive = teamTab === tab.id;
                   let activeClasses = "border-black bg-black text-white";
                   if (isActive && tab.id === "invalid") activeClasses = "border-amber-600 bg-amber-600 text-white";
-                  if (isActive && (tab.id === "valid" || tab.id === "multipleFemales" || tab.id === "moreThan2Females")) activeClasses = "border-emerald-600 bg-emerald-600 text-white";
+                  if (isActive && (tab.id === "valid" || tab.id === "multipleFemales" || tab.id === "moreThan2Females" || tab.id === "withPs" || tab.id === "hardwarePs" || tab.id === "softwarePs")) activeClasses = "border-emerald-600 bg-emerald-600 text-white";
+                  if (isActive && tab.id === "withoutPs") activeClasses = "border-amber-600 bg-amber-600 text-white";
 
                   return (
                     <button

@@ -47,8 +47,13 @@ export async function checkRateLimit(request: NextRequest, identifier?: string):
   return true;
 }
 
-let schemaReady: Promise<void> | null = null;
-let schemaInitialized = false;
+const globalForSchema = globalThis as unknown as {
+  __schemaReady: Promise<void> | null;
+  __schemaInitialized: boolean;
+};
+
+let schemaReady: Promise<void> | null = globalForSchema.__schemaReady || null;
+let schemaInitialized = globalForSchema.__schemaInitialized || false;
 
 export async function ensureSchema() {
   if (schemaInitialized) return;
@@ -59,6 +64,7 @@ export async function ensureSchema() {
       return;
     } catch {
       schemaReady = null;
+      globalForSchema.__schemaReady = null;
     }
   }
 
@@ -163,6 +169,7 @@ export async function ensureSchema() {
         try { await env.sih_app_db.prepare(stmt).run(); } catch {}
       }
       schemaInitialized = true;
+      globalForSchema.__schemaInitialized = true;
     } catch (cause: any) {
       console.error("[DB Schema Error]", cause, cause?.cause);
       throw cause;

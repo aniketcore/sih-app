@@ -41,7 +41,7 @@ export type TeamStore = {
   watchInvites: (email: string, onChange: (invites: Invite[]) => void, options?: { disablePolling?: boolean }) => Unsubscribe;
   watchOutgoingInvites: (teamId: string, onChange: (invites: Invite[]) => void, options?: { disablePolling?: boolean }) => Unsubscribe;
   getUserProfile: () => Promise<{ isFrozen: boolean; isLeadersOnlyLogin: boolean; isFCFSEnabled: boolean; isLeader: boolean; claimedPs: string | null; user: UserProfile | null }>;
-  getAdminOverview: () => Promise<{ isFrozen: boolean; users: UserProfile[]; teams: Array<Omit<Team, "members"> & { createdAt: number; members: Array<{ email: string; name: string | null; phone: string | null; regNo: string | null; gender: string | null; branch: string | null; }> }> } | null>;
+  getAdminOverview: () => Promise<{ isFrozen: boolean; users: UserProfile[]; teams: Array<Omit<Team, "members"> & { claimedPs?: string | null; createdAt: number; members: Array<{ email: string; name: string | null; phone: string | null; regNo: string | null; gender: string | null; branch: string | null; }> }> } | null>;
   saveUserProfile: (input: { name: string; phone: string; regNo: string; gender: string; branch: string }) => Promise<void>;
   syncUser: (input: { uid: string; email: string; photoUrl?: string | null }) => Promise<void>;
   createTeam: (input: { name: string; ownerUid: string; ownerEmail: string }) => Promise<void>;
@@ -132,7 +132,7 @@ export const teamStore: TeamStore = {
   },
 
   async getAdminOverview() {
-    const res = await requestJson<{ isFrozen: boolean; users: UserProfile[]; teams: Array<Omit<Team, "members"> & { createdAt: number; members: Array<{ email: string; name: string | null; phone: string | null; regNo: string | null; gender: string | null; branch: string | null; }> }> }>("/api/admin");
+    const res = await requestJson<{ isFrozen: boolean; users: UserProfile[]; teams: Array<Omit<Team, "members"> & { claimedPs?: string | null; createdAt: number; members: Array<{ email: string; name: string | null; phone: string | null; regNo: string | null; gender: string | null; branch: string | null; }> }> }>("/api/admin");
     return res;
   },
 
