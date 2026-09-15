@@ -98,8 +98,13 @@ export default function AdminDashboardPage() {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [teams, setTeams] = useState<AdminTeam[]>([]);
   const [mainTab, setMainTab] = useState<"teams" | "users">("teams");
-  const [userTab, setUserTab] = useState<string>("all");
-  const [teamTab, setTeamTab] = useState<string>("all");
+  const [userSectionFilter, setUserSectionFilter] = useState("all");
+  const [userAssignmentFilter, setUserAssignmentFilter] = useState("all");
+  const [userProfileFilter, setUserProfileFilter] = useState("all");
+  const [userGenderFilter, setUserGenderFilter] = useState("all");
+  const [teamSizeFilter, setTeamSizeFilter] = useState("all");
+  const [teamGenderFilter, setTeamGenderFilter] = useState("all");
+  const [teamPsFilter, setTeamPsFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [isFrozen, setIsFrozen] = useState(false);
 
@@ -173,15 +178,26 @@ export default function AdminDashboardPage() {
       unassignedBoys: unassignedBoys.length,
       incomplete: incompleteProfileUsers.length,
       OTHER: 0,
+      OTHER_unassigned: 0,
     };
-    KNOWN_SECTIONS.forEach((s) => (c[s] = 0));
+    KNOWN_SECTIONS.forEach((s) => {
+      c[s] = 0;
+      c[`${s}_unassigned`] = 0;
+    });
     users.forEach((u) => {
       const sec = getSection(u.email);
-      if (c[sec] !== undefined) c[sec]++;
-      else c["OTHER"]++;
+      const isUnassigned = !assignedEmailsSet.has(u.email.toLowerCase());
+
+      if (c[sec] !== undefined) {
+        c[sec]++;
+        if (isUnassigned) c[`${sec}_unassigned`]++;
+      } else {
+        c["OTHER"]++;
+        if (isUnassigned) c["OTHER_unassigned"]++;
+      }
     });
     return c;
-  }, [users, unassignedUsers, unassignedGirls, unassignedBoys, incompleteProfileUsers]);
+  }, [users, unassignedUsers, unassignedGirls, unassignedBoys, incompleteProfileUsers, assignedEmailsSet]);
 
   const teamCounts = useMemo(() => {
     let complete = 0;
@@ -238,14 +254,47 @@ export default function AdminDashboardPage() {
   // Search filter
   const filteredUsers = useMemo(() => {
     let list = users;
-    if (userTab === "unassigned") list = unassignedUsers;
-    else if (userTab === "unassignedGirls") list = unassignedGirls;
-    else if (userTab === "unassignedBoys") list = unassignedBoys;
-    else if (userTab === "incomplete") list = incompleteProfileUsers;
-    else if (userTab !== "all") list = users.filter((u) => getSection(u.email) === userTab);
     
-    // Sort by the 2 or 3 digit roll number just before the '@' in the email
+    // Section filter
+    if (userSectionFilter !== "all") {
+      list = list.filter((u) => getSection(u.email) === userSectionFilter);
+    }
+
+    // Assignment filter
+    if (userAssignmentFilter === "unassigned") {
+      list = list.filter((u) => !assignedEmailsSet.has(u.email.toLowerCase()));
+    } else if (userAssignmentFilter === "assigned") {
+      list = list.filter((u) => assignedEmailsSet.has(u.email.toLowerCase()));
+    }
+
+    // Profile filter
+    if (userProfileFilter === "complete") {
+      list = list.filter((u) => {
+        if (typeof u.isComplete === "boolean") return u.isComplete;
+        return Boolean(u.name?.trim() && u.phone?.trim() && u.regNo?.trim() && u.gender?.trim() && u.branch?.trim());
+      });
+    } else if (userProfileFilter === "incomplete") {
+      list = list.filter((u) => {
+        if (typeof u.isComplete === "boolean") return !u.isComplete;
+        return !u.name?.trim() || !u.phone?.trim() || !u.regNo?.trim() || !u.gender?.trim() || !u.branch?.trim();
+      });
+    }
+
+    // Gender filter
+    if (userGenderFilter === "female") {
+      list = list.filter((u) => u.gender?.toLowerCase() === "female");
+    } else if (userGenderFilter === "male") {
+      list = list.filter((u) => u.gender?.toLowerCase() === "male");
+    }
+    
+    // Sort by unassigned status first, then by the 2 or 3 digit roll number just before the '@' in the email
     list = [...list].sort((a, b) => {
+      const aAssigned = assignedEmailsSet.has(a.email.toLowerCase());
+      const bAssigned = assignedEmailsSet.has(b.email.toLowerCase());
+      
+      if (!aAssigned && bAssigned) return -1;
+      if (aAssigned && !bAssigned) return 1;
+
       const getRollNum = (email: string) => {
         const match = email.match(/(\d+)@/);
         return match ? parseInt(match[1], 10) : 99999;
@@ -263,35 +312,32 @@ export default function AdminDashboardPage() {
         u.phone?.toLowerCase().includes(q) ||
         u.branch?.toLowerCase().includes(q),
     );
-  }, [users, unassignedUsers, incompleteProfileUsers, userTab, search]);
+  }, [users, assignedEmailsSet, userSectionFilter, userAssignmentFilter, userProfileFilter, userGenderFilter, search]);
 
   const filteredTeams = useMemo(() => {
     let list = teams;
-    if (teamTab === "complete") list = teams.filter((t) => t.members.length >= 6);
-    else if (teamTab === "incomplete") list = teams.filter((t) => t.members.length < 6);
-    else if (teamTab === "valid") list = teams.filter((t) => t.members.some((m) => m.gender?.toLowerCase() === "female"));
-    else if (teamTab === "invalid") list = teams.filter((t) => !t.members.some((m) => m.gender?.toLowerCase() === "female"));
-    else if (teamTab === "multipleFemales") list = teams.filter((t) => t.members.filter(m => m.gender?.toLowerCase() === "female").length > 1);
-    else if (teamTab === "moreThan2Females") list = teams.filter((t) => t.members.filter(m => m.gender?.toLowerCase() === "female").length > 2);
-    else if (teamTab === "withPs") list = teams.filter((t) => !!t.claimedPs);
-    else if (teamTab === "withoutPs") list = teams.filter((t) => !t.claimedPs);
-    else if (teamTab === "hardwarePs") list = teams.filter((t) => t.claimedPs && problemStatements.find(ps => ps.ps_number === t.claimedPs)?.category === "Hardware");
-    else if (teamTab === "softwarePs") list = teams.filter((t) => t.claimedPs && problemStatements.find(ps => ps.ps_number === t.claimedPs)?.category === "Software");
+    if (teamSizeFilter === "complete") list = list.filter((t) => t.members.length >= 6);
+    else if (teamSizeFilter === "incomplete") list = list.filter((t) => t.members.length < 6);
+
+    if (teamGenderFilter === "valid") list = list.filter((t) => t.members.some((m) => m.gender?.toLowerCase() === "female"));
+    else if (teamGenderFilter === "invalid") list = list.filter((t) => !t.members.some((m) => m.gender?.toLowerCase() === "female"));
+    else if (teamGenderFilter === "multipleFemales") list = list.filter((t) => t.members.filter(m => m.gender?.toLowerCase() === "female").length > 1);
+    else if (teamGenderFilter === "moreThan2Females") list = list.filter((t) => t.members.filter(m => m.gender?.toLowerCase() === "female").length > 2);
+
+    if (teamPsFilter === "withPs") list = list.filter((t) => !!t.claimedPs);
+    else if (teamPsFilter === "withoutPs") list = list.filter((t) => !t.claimedPs);
+    else if (teamPsFilter === "hardwarePs") list = list.filter((t) => t.claimedPs && problemStatements.find(ps => ps.ps_number === t.claimedPs)?.category === "Hardware");
+    else if (teamPsFilter === "softwarePs") list = list.filter((t) => t.claimedPs && problemStatements.find(ps => ps.ps_number === t.claimedPs)?.category === "Software");
 
     if (!search.trim()) return list;
     const q = search.toLowerCase().trim();
     return list.filter(
       (t) =>
         t.name.toLowerCase().includes(q) ||
-        t.ownerEmail.toLowerCase().includes(q) ||
-        t.members.some(
-          (m) =>
-            m.email.toLowerCase().includes(q) ||
-            m.name?.toLowerCase().includes(q) ||
-            m.regNo?.toLowerCase().includes(q),
-        ),
+        t.id.toLowerCase().includes(q) ||
+        t.members.some(m => m.email.toLowerCase().includes(q) || m.name?.toLowerCase().includes(q) || m.phone?.includes(q) || m.regNo?.toLowerCase().includes(q))
     );
-  }, [teams, teamTab, search]);
+  }, [teams, search, teamSizeFilter, teamGenderFilter, teamPsFilter, problemStatements]);
 
   function exportCSV() {
     const headers = ["Name", "Email", "Phone", "Reg No", "Branch", "Gender", "Profile Complete", "Team Assigned"];
@@ -410,118 +456,108 @@ export default function AdminDashboardPage() {
           />
 
           {mainTab === "users" && (
-            <div className="flex flex-col gap-2 pt-1">
-              <div className="flex flex-wrap gap-1.5">
-                {[
-                  { id: "all", label: "All Users" },
-                  { id: "unassigned", label: "Unassigned" },
-                  { id: "unassignedGirls", label: "Unassigned (Girls)" },
-                  { id: "unassignedBoys", label: "Unassigned (Boys)" },
-                  { id: "incomplete", label: "Incomplete" },
-                ].map((tab) => {
-                  const isActive = userTab === tab.id;
-                  let activeClasses = "border-black bg-black text-white";
-                  if (isActive && tab.id === "unassigned") activeClasses = "border-amber-600 bg-amber-600 text-white";
-                  if (isActive && tab.id === "unassignedGirls") activeClasses = "border-pink-500 bg-pink-500 text-white";
-                  if (isActive && tab.id === "unassignedBoys") activeClasses = "border-blue-500 bg-blue-500 text-white";
-                  if (isActive && tab.id === "incomplete") activeClasses = "border-red-600 bg-red-600 text-white";
-
-                  return (
-                    <button
-                      key={tab.id}
-                      className={`border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
-                        isActive ? activeClasses : "border-slate-300 text-slate-600 hover:bg-slate-50 bg-white"
-                      }`}
-                      onClick={() => setUserTab(tab.id)}
-                      type="button"
-                    >
-                      {tab.label} ({counts[tab.id] || 0})
-                    </button>
-                  );
-                })}
+            <div className="flex flex-wrap gap-2 pt-1">
+              <div className="flex items-center gap-1.5 border border-slate-300 bg-white px-2 shadow-sm rounded-sm">
+                <span className="text-[10px] uppercase text-slate-500 font-bold">Section</span>
+                <select
+                  value={userSectionFilter}
+                  onChange={(e) => setUserSectionFilter(e.target.value)}
+                  className="text-xs py-1.5 outline-none bg-transparent"
+                >
+                  <option value="all">All ({counts.all || 0})</option>
+                  {KNOWN_SECTIONS.map(sec => (
+                    <option key={sec} value={sec}>
+                      {sec} ({counts[sec] || 0}) {counts[`${sec}_unassigned`] ? `- ${counts[`${sec}_unassigned`]} no team` : ""}
+                    </option>
+                  ))}
+                  <option value="OTHER">Other ({counts.OTHER || 0}) {counts.OTHER_unassigned ? `- ${counts.OTHER_unassigned} no team` : ""}</option>
+                </select>
               </div>
-              <div className="flex flex-wrap gap-1.5">
-                {[
-                  ...KNOWN_SECTIONS.map((sec) => ({ id: sec, label: sec })),
-                  { id: "OTHER", label: "Other" },
-                ].map((tab) => {
-                  const isActive = userTab === tab.id;
-                  const activeClasses = "border-black bg-black text-white";
 
-                  return (
-                    <button
-                      key={tab.id}
-                      className={`border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
-                        isActive ? activeClasses : "border-slate-300 text-slate-600 hover:bg-slate-50 bg-white"
-                      }`}
-                      onClick={() => setUserTab(tab.id)}
-                      type="button"
-                    >
-                      {tab.label} ({counts[tab.id] || 0})
-                    </button>
-                  );
-                })}
+              <div className="flex items-center gap-1.5 border border-slate-300 bg-white px-2 shadow-sm rounded-sm">
+                <span className="text-[10px] uppercase text-slate-500 font-bold">Team Status</span>
+                <select
+                  value={userAssignmentFilter}
+                  onChange={(e) => setUserAssignmentFilter(e.target.value)}
+                  className="text-xs py-1.5 outline-none bg-transparent"
+                >
+                  <option value="all">All</option>
+                  <option value="unassigned">Unassigned / No Team ({counts.unassigned || 0})</option>
+                  <option value="assigned">Assigned / Has Team</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-1.5 border border-slate-300 bg-white px-2 shadow-sm rounded-sm">
+                <span className="text-[10px] uppercase text-slate-500 font-bold">Profile</span>
+                <select
+                  value={userProfileFilter}
+                  onChange={(e) => setUserProfileFilter(e.target.value)}
+                  className="text-xs py-1.5 outline-none bg-transparent"
+                >
+                  <option value="all">All</option>
+                  <option value="complete">Complete</option>
+                  <option value="incomplete">Incomplete ({counts.incomplete || 0})</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-1.5 border border-slate-300 bg-white px-2 shadow-sm rounded-sm">
+                <span className="text-[10px] uppercase text-slate-500 font-bold">Gender</span>
+                <select
+                  value={userGenderFilter}
+                  onChange={(e) => setUserGenderFilter(e.target.value)}
+                  className="text-xs py-1.5 outline-none bg-transparent"
+                >
+                  <option value="all">All</option>
+                  <option value="female">Female</option>
+                  <option value="male">Male</option>
+                </select>
               </div>
             </div>
           )}
 
           {mainTab === "teams" && (
-            <div className="flex flex-col gap-2 pt-1">
-              <div className="flex flex-wrap gap-1.5">
-                {[
-                  { id: "all", label: "All Teams" },
-                  { id: "complete", label: "Complete (6 Members)" },
-                  { id: "incomplete", label: "Incomplete (<6 Members)" },
-                ].map((tab) => {
-                  const isActive = teamTab === tab.id;
-                  let activeClasses = "border-black bg-black text-white";
-                  if (isActive && tab.id === "incomplete") activeClasses = "border-amber-600 bg-amber-600 text-white";
-                  if (isActive && tab.id === "complete") activeClasses = "border-emerald-600 bg-emerald-600 text-white";
-
-                  return (
-                    <button
-                      key={tab.id}
-                      className={`border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
-                        isActive ? activeClasses : "border-slate-300 text-slate-600 hover:bg-slate-50 bg-white"
-                      }`}
-                      onClick={() => setTeamTab(tab.id)}
-                      type="button"
-                    >
-                      {tab.label} ({(teamCounts as any)[tab.id] || 0})
-                    </button>
-                  );
-                })}
+            <div className="flex flex-wrap gap-2 pt-1">
+              <div className="flex items-center gap-1.5 border border-slate-300 bg-white px-2 shadow-sm rounded-sm">
+                <span className="text-[10px] uppercase text-slate-500 font-bold">Size</span>
+                <select
+                  value={teamSizeFilter}
+                  onChange={(e) => setTeamSizeFilter(e.target.value)}
+                  className="text-xs py-1.5 outline-none bg-transparent"
+                >
+                  <option value="all">All Teams ({(teamCounts as any).all || 0})</option>
+                  <option value="complete">Complete ({(teamCounts as any).complete || 0})</option>
+                  <option value="incomplete">Incomplete ({(teamCounts as any).incomplete || 0})</option>
+                </select>
               </div>
-              <div className="flex flex-wrap gap-1.5">
-                {[
-                  { id: "valid", label: "Valid (Has Female)" },
-                  { id: "invalid", label: "Invalid (No Female)" },
-                  { id: "multipleFemales", label: "Multiple Females" },
-                  { id: "moreThan2Females", label: "More Than 2 Females" },
-                  { id: "withPs", label: "With PS" },
-                  { id: "withoutPs", label: "Without PS" },
-                  { id: "hardwarePs", label: "Hardware PS" },
-                  { id: "softwarePs", label: "Software PS" },
-                ].map((tab) => {
-                  const isActive = teamTab === tab.id;
-                  let activeClasses = "border-black bg-black text-white";
-                  if (isActive && tab.id === "invalid") activeClasses = "border-amber-600 bg-amber-600 text-white";
-                  if (isActive && (tab.id === "valid" || tab.id === "multipleFemales" || tab.id === "moreThan2Females" || tab.id === "withPs" || tab.id === "hardwarePs" || tab.id === "softwarePs")) activeClasses = "border-emerald-600 bg-emerald-600 text-white";
-                  if (isActive && tab.id === "withoutPs") activeClasses = "border-amber-600 bg-amber-600 text-white";
 
-                  return (
-                    <button
-                      key={tab.id}
-                      className={`border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
-                        isActive ? activeClasses : "border-slate-300 text-slate-600 hover:bg-slate-50 bg-white"
-                      }`}
-                      onClick={() => setTeamTab(tab.id)}
-                      type="button"
-                    >
-                      {tab.label} ({(teamCounts as any)[tab.id] || 0})
-                    </button>
-                  );
-                })}
+              <div className="flex items-center gap-1.5 border border-slate-300 bg-white px-2 shadow-sm rounded-sm">
+                <span className="text-[10px] uppercase text-slate-500 font-bold">Gender</span>
+                <select
+                  value={teamGenderFilter}
+                  onChange={(e) => setTeamGenderFilter(e.target.value)}
+                  className="text-xs py-1.5 outline-none bg-transparent"
+                >
+                  <option value="all">All ({(teamCounts as any).all || 0})</option>
+                  <option value="valid">Valid / Has Female ({(teamCounts as any).valid || 0})</option>
+                  <option value="invalid">Invalid / No Female ({(teamCounts as any).invalid || 0})</option>
+                  <option value="multipleFemales">Multiple Females ({(teamCounts as any).multipleFemales || 0})</option>
+                  <option value="moreThan2Females">More Than 2 Females ({(teamCounts as any).moreThan2Females || 0})</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-1.5 border border-slate-300 bg-white px-2 shadow-sm rounded-sm">
+                <span className="text-[10px] uppercase text-slate-500 font-bold">Problem Statement</span>
+                <select
+                  value={teamPsFilter}
+                  onChange={(e) => setTeamPsFilter(e.target.value)}
+                  className="text-xs py-1.5 outline-none bg-transparent"
+                >
+                  <option value="all">All ({(teamCounts as any).all || 0})</option>
+                  <option value="withPs">Selected Any PS ({(teamCounts as any).withPs || 0})</option>
+                  <option value="withoutPs">Not Selected ({(teamCounts as any).withoutPs || 0})</option>
+                  <option value="hardwarePs">Hardware PS ({(teamCounts as any).hardwarePs || 0})</option>
+                  <option value="softwarePs">Software PS ({(teamCounts as any).softwarePs || 0})</option>
+                </select>
               </div>
             </div>
           )}

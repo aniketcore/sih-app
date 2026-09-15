@@ -60,6 +60,35 @@ export function AuthPanel() {
 
   const isSenior = Boolean(user.email && !user.email.trim().toLowerCase().startsWith("2026") && !profile?.isAdmin);
 
+  if (profile?.isAdmin && profile?.adminRole === null) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between text-sm mb-4 border-b border-slate-200 pb-2">
+          <span>{user.email}</span>
+          <button
+            className="text-xs text-slate-500 underline disabled:opacity-50"
+            disabled={busy}
+            onClick={handleSignOut}
+            type="button"
+          >
+            Sign out
+          </button>
+        </div>
+        <div className="flex flex-col items-center justify-center p-8 bg-blue-50 border border-blue-200 rounded text-center space-y-4">
+          <span className="text-4xl">👀</span>
+          <h2 className="text-xl font-bold text-blue-900">Admin View Mode</h2>
+          <p className="text-sm text-blue-800">
+            You are logged in as an Admin (View-Only). 
+            You do not have access to the student Team formation tools.
+          </p>
+          <a href="/admin" className="px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white font-semibold text-sm transition-colors">
+            Go to Admin Dashboard
+          </a>
+        </div>
+      </div>
+    );
+  }
+
   if (isLeadersOnlyLogin && !isLeader && !profile?.isAdmin) {
     return (
       <div className="space-y-4">

@@ -17,7 +17,13 @@ export async function GET(request: NextRequest) {
       .prepare("SELECT id, email, name, phone, reg_no, gender, branch, photo_url FROM users WHERE id = ?")
       .bind(user.uid)
       .first<{ id: string; email: string; name?: string | null; phone?: string | null; reg_no?: string | null; gender?: string | null; branch?: string | null; photo_url?: string | null }>();
-    const userIsAdmin = await isAdmin(user.email);
+    const adminCheck = await env.sih_app_db
+      .prepare("SELECT role FROM admins WHERE email = ? LIMIT 1")
+      .bind(normalizeEmail(user.email))
+      .first<{ role: string | null }>();
+    const userIsAdmin = Boolean(adminCheck);
+    const adminRole = adminCheck ? (adminCheck.role || null) : null;
+
     const isLeadersOnlyLogin = await getIsLeadersOnlyLogin();
     const isLeaderResult = await env.sih_app_db.prepare("SELECT 1 FROM teams WHERE owner_uid = ? LIMIT 1").bind(user.uid).first();
     const claimResult = await env.sih_app_db.prepare("SELECT resource_id FROM fcfs_claims WHERE user_id = ? LIMIT 1").bind(user.uid).first<{ resource_id: string }>();
@@ -41,6 +47,7 @@ export async function GET(request: NextRequest) {
             photoUrl: row.photo_url ?? null,
             isComplete: Boolean(row.name && row.phone && row.reg_no && row.gender && row.branch),
             isAdmin: userIsAdmin,
+            adminRole,
           }
         : null,
     });

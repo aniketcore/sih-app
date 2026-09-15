@@ -16,9 +16,9 @@ export async function GET(request: NextRequest) {
       return Response.json({ error: "Forbidden: Admin access required" }, { status: 403 });
     }
 
-    // Fetch all users
+    // Fetch all users (excluding irrelevant non-2026pcea users)
     const usersResult = await env.sih_app_db
-      .prepare("SELECT id, email, name, phone, reg_no, gender, branch, photo_url, created_at FROM users ORDER BY created_at DESC")
+      .prepare("SELECT id, email, name, phone, reg_no, gender, branch, photo_url, created_at FROM users WHERE email LIKE '2026pcea%' ORDER BY created_at DESC")
       .all<{
         id: string;
         email: string;
@@ -31,9 +31,9 @@ export async function GET(request: NextRequest) {
         created_at: number;
       }>();
 
-    // Fetch all teams
+    // Fetch all teams (excluding irrelevant teams)
     const teamsResult = await env.sih_app_db
-      .prepare("SELECT id, name, owner_uid, owner_email, created_at FROM teams ORDER BY created_at DESC")
+      .prepare("SELECT id, name, owner_uid, owner_email, created_at FROM teams WHERE owner_email LIKE '2026pcea%' ORDER BY created_at DESC")
       .all<{ id: string; name: string; owner_uid: string; owner_email: string; created_at: number }>();
 
     // Fetch all members in 1 single JOIN query instead of N+1 calls

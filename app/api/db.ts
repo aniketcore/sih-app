@@ -121,6 +121,7 @@ export async function ensureSchema() {
         env.sih_app_db.prepare(`
           CREATE TABLE IF NOT EXISTS admins (
             email TEXT PRIMARY KEY,
+            role TEXT,
             created_at INTEGER NOT NULL
           )
         `),
@@ -168,6 +169,8 @@ export async function ensureSchema() {
       for (const stmt of alterStatements) {
         try { await env.sih_app_db.prepare(stmt).run(); } catch {}
       }
+      // Add explicit alter table for admins role in case table already exists
+      try { await env.sih_app_db.prepare("ALTER TABLE admins ADD COLUMN role TEXT").run(); } catch {}
       schemaInitialized = true;
       globalForSchema.__schemaInitialized = true;
     } catch (cause: any) {

@@ -34,6 +34,7 @@ export type UserProfile = {
   photoUrl: string | null;
   isComplete: boolean;
   isAdmin?: boolean;
+  adminRole?: string | null;
 };
 
 export type TeamStore = {
