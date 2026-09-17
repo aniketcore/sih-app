@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { subscribeAuth, signInWithGoogle, signInWithEmail, createUserWithEmail, type AuthUser } from "../../lib/auth";
+import { subscribeAuth, signInWithGoogle, signInWithEmail, type AuthUser } from "../../lib/auth";
 
-const isEmailAuthEnabled = import.meta.env.VITE_ENABLE_EMAIL_AUTH === "true";
 
 export default function LoginPage() {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -47,7 +46,7 @@ export default function LoginPage() {
     setError(null);
     try {
       if (isSignUp) {
-        await createUserWithEmail(email, password);
+        throw new Error("Registration via email is disabled.");
       } else {
         await signInWithEmail(email, password);
       }
@@ -80,9 +79,8 @@ export default function LoginPage() {
             Sign in with Poornima Google Account (@poornima.org)
           </button>
 
-          {isEmailAuthEnabled ? (
             <div className="space-y-3 border-t border-slate-200 pt-4">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Dev Email Auth</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Email Login</p>
               <input
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                 onChange={(e) => setEmail(e.target.value)}
@@ -106,17 +104,8 @@ export default function LoginPage() {
                 >
                   Sign In (Email)
                 </button>
-                <button
-                  className="flex-1 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                  disabled={busy}
-                  onClick={() => handleEmailAuth(true)}
-                  type="button"
-                >
-                  Register
-                </button>
               </div>
             </div>
-          ) : null}
 
           {error ? <p className="text-sm text-red-600">{error}</p> : null}
         </div>

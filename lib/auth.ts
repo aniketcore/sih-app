@@ -1,4 +1,4 @@
-import { type User, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
+import { type User, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut, signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "./firebase";
 
 import { teamStore } from "./team-store";
@@ -68,14 +68,5 @@ export async function signInWithEmail(email: string, password: string) {
   return result.user;
 }
 
-export async function createUserWithEmail(email: string, password: string) {
-  const result = await createUserWithEmailAndPassword(auth, email, password);
 
-  if (!isAllowedEmail(result.user.email)) {
-    await signOut(auth);
-    throw new Error(`Only @${allowedEmailDomain} accounts are allowed.`);
-  }
-
-  return result.user;
-}
 
