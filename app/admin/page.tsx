@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { subscribeAuth, type AuthUser } from "../../lib/auth";
 import { teamStore, type UserProfile, type Team } from "../../lib/team-store";
 import { problemStatements } from "../../lib/problem-statements";
+import * as XLSX from "xlsx";
 
 type AdminTeam = Omit<Team, "members"> & {
   createdAt: number;
@@ -339,27 +340,346 @@ export default function AdminDashboardPage() {
     );
   }, [teams, search, teamSizeFilter, teamGenderFilter, teamPsFilter, problemStatements]);
 
-  function exportCSV() {
-    const headers = ["Name", "Email", "Phone", "Reg No", "Branch", "Gender", "Profile Complete", "Team Assigned"];
-    const rows = users.map((u) => [
-      `"${u.name ?? ""}"`,
-      `"${u.email}"`,
-      `"${u.phone ?? ""}"`,
-      `"${u.regNo ?? ""}"`,
-      `"${u.branch ?? ""}"`,
-      `"${u.gender ?? ""}"`,
-      u.isComplete ? "Yes" : "No",
-      assignedEmailsSet.has(u.email.toLowerCase()) ? "Yes" : "No",
-    ]);
+  function getTeamNumber(id: string) {
+    let hash = 0;
+    for (let i = 0; i < id.length; i++) {
+      hash = (hash << 5) - hash + id.charCodeAt(i);
+      hash |= 0;
+    }
+    return 1000 + (Math.abs(hash) % 9000);
+  }
 
-    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `sih_users_report_${new Date().toISOString().split("T")[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  function exportExcel() {
+    const emailToTeam = new Map<string, AdminTeam>();
+    teams.forEach(t => {
+      t.members.forEach(m => emailToTeam.set(m.email.toLowerCase(), t));
+    });
+
+    const headers = [
+      "Team Name", "Team Number", "PS ID", "Members Count", "Role", 
+      "Name", "Email", "Phone", "Reg No", "Branch", "Gender", "Profile Complete"
+    ];
+
+    const colWidths = [
+      { wch: 25 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 10 }, 
+      { wch: 25 }, { wch: 35 }, { wch: 15 }, { wch: 20 }, 
+      { wch: 10 }, { wch: 10 }, { wch: 15 }
+    ];
+
+    const applyStyles = (worksheet: any, rowData: any[][]) => {
+      for (const key in worksheet) {
+        if (key[0] === '!') continue;
+        const colMatch = key.match(/[A-Z]+/);
+        const rowMatch = key.match(/\d+/);
+        if (!colMatch || !rowMatch) continue;
+
+        const col = colMatch[0];
+        const rowNum = parseInt(rowMatch[0], 10);
+        let style: any = worksheet[key].s || {};
+
+        if (['A', 'B', 'C', 'D'].includes(col)) {
+          style.alignment = { vertical: "center", horizontal: "center", wrapText: true };
+        }
+
+        if (rowNum > 1) {
+          const dataRow = rowData[rowNum - 2];
+          if (dataRow && typeof dataRow[3] === 'number' && dataRow[3] > 0 && dataRow[3] <= 3) {
+            style.fill = { fgColor: { rgb: "FFFFCCCC" } };
+          }
+        }
+
+        if (Object.keys(style).length > 0) {
+          worksheet[key].s = style;
+        }
+      }
+    };
+
+    const sectionToRows = new Map<string, any[][]>();
+    const allRows: any[][] = [];
+    const exportedEmails = new Set<string>();
+
+    const userMap = new Map<string, AdminUser>();
+    filteredUsers.forEach(u => userMap.set(u.email.toLowerCase(), u));
+
+    const addRow = (u: AdminUser, team: AdminTeam | null, role: string) => {
+      const row = [
+        team ? team.name : "None",
+        team ? getTeamNumber(team.id) : "None",
+        team ? (team.claimedPs || "None") : "None",
+        team ? team.members.length : 0,
+        role,
+        u.name ?? "",
+        u.email,
+        u.phone ?? "",
+        u.regNo ?? "",
+        u.branch ?? "",
+        u.gender ?? "",
+        u.isComplete ? "Yes" : "No",
+        team ? team.id : "None"
+      ];
+      allRows.push(row);
+      const sec = getSection(u.email);
+      if (!sectionToRows.has(sec)) sectionToRows.set(sec, []);
+      sectionToRows.get(sec)!.push(row);
+    };
+
+    teams.forEach(team => {
+      team.members.forEach(m => {
+        const u = userMap.get(m.email.toLowerCase());
+        if (u) {
+          const role = team.ownerEmail.toLowerCase() === u.email.toLowerCase() ? "Leader" : "Member";
+          addRow(u, team, role);
+          exportedEmails.add(u.email.toLowerCase());
+        }
+      });
+    });
+
+    filteredUsers.forEach((u) => {
+      if (!exportedEmails.has(u.email.toLowerCase())) {
+        addRow(u, null, "None");
+      }
+    });
+
+    const wb = XLSX.utils.book_new();
+
+    allRows.sort((a, b) => {
+      const teamA = String(a[12]);
+      const teamB = String(b[12]);
+      if (teamA === "None" && teamB !== "None") return 1;
+      if (teamA !== "None" && teamB === "None") return -1;
+      return teamA.localeCompare(teamB);
+    });
+
+    const masterWs = XLSX.utils.aoa_to_sheet([headers, ...allRows.map(r => r.slice(0, 12))]);
+    masterWs["!cols"] = colWidths;
+    applyStyles(masterWs, allRows);
+    const masterMerges: any[] = [];
+    let masterStartRow = 1;
+    let masterCurrentTeamId = allRows.length > 0 ? allRows[0][12] : null;
+
+    for (let i = 1; i <= allRows.length; i++) {
+      const teamId = i < allRows.length ? allRows[i][12] : null;
+      if (teamId !== masterCurrentTeamId) {
+        if (masterCurrentTeamId !== "None") {
+          const endRow = i;
+          if (endRow > masterStartRow) {
+            masterMerges.push({ s: { r: masterStartRow, c: 0 }, e: { r: endRow, c: 0 } });
+            masterMerges.push({ s: { r: masterStartRow, c: 1 }, e: { r: endRow, c: 1 } });
+            masterMerges.push({ s: { r: masterStartRow, c: 2 }, e: { r: endRow, c: 2 } });
+            masterMerges.push({ s: { r: masterStartRow, c: 3 }, e: { r: endRow, c: 3 } });
+          }
+        }
+        masterStartRow = i + 1;
+        masterCurrentTeamId = teamId;
+      }
+    }
+    if (masterMerges.length > 0) masterWs["!merges"] = masterMerges;
+    XLSX.utils.book_append_sheet(wb, masterWs, "All Data");
+
+    // 2. Create individual Section Sheets
+    const sections = Array.from(sectionToRows.keys()).sort();
+    sections.forEach((sec) => {
+      const rows = sectionToRows.get(sec)!;
+      rows.sort((a, b) => {
+        const teamA = String(a[12]);
+        const teamB = String(b[12]);
+        if (teamA === "None" && teamB !== "None") return 1;
+        if (teamA !== "None" && teamB === "None") return -1;
+        return teamA.localeCompare(teamB);
+      });
+
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...rows.map(r => r.slice(0, 12))]);
+      ws["!cols"] = colWidths;
+      applyStyles(ws, rows);
+
+      const merges: any[] = [];
+      let startRow = 1;
+      let currentTeamId = rows.length > 0 ? rows[0][12] : null;
+
+      for (let i = 1; i <= rows.length; i++) {
+        const teamId = i < rows.length ? rows[i][12] : null;
+        if (teamId !== currentTeamId) {
+          if (currentTeamId !== "None") {
+            const endRow = i;
+            if (endRow > startRow) {
+              merges.push({ s: { r: startRow, c: 0 }, e: { r: endRow, c: 0 } });
+              merges.push({ s: { r: startRow, c: 1 }, e: { r: endRow, c: 1 } });
+              merges.push({ s: { r: startRow, c: 2 }, e: { r: endRow, c: 2 } });
+              merges.push({ s: { r: startRow, c: 3 }, e: { r: endRow, c: 3 } });
+            }
+          }
+          startRow = i + 1;
+          currentTeamId = teamId;
+        }
+      }
+
+      if (merges.length > 0) {
+        ws["!merges"] = merges;
+      }
+      XLSX.utils.book_append_sheet(wb, ws, sec === "OTHER" ? "OTHER" : `Section ${sec}`);
+    });
+
+    XLSX.writeFile(wb, "SIH_Admin_Data.xlsx");
+  }
+
+  function exportCompleteExcel() {
+    const validTeams = teams.filter((t) => !!t.claimedPs);
+    
+    const emailToTeam = new Map<string, AdminTeam>();
+    validTeams.forEach(t => {
+      t.members.forEach(m => emailToTeam.set(m.email.toLowerCase(), t));
+    });
+
+    const validUsers = users.filter((u) => {
+      const email = u.email.toLowerCase();
+      return email.startsWith("2026pcea") && emailToTeam.has(email);
+    });
+
+    const headers = [
+      "Team Name", "Team Number", "PS ID", "Members Count", "Role", 
+      "Name", "Email", "Phone", "Reg No", "Branch", "Gender", "Profile Complete"
+    ];
+
+    const colWidths = [
+      { wch: 25 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 10 }, 
+      { wch: 25 }, { wch: 35 }, { wch: 15 }, { wch: 20 }, 
+      { wch: 10 }, { wch: 10 }, { wch: 15 }
+    ];
+
+    const applyStyles = (worksheet: any, rowData: any[][]) => {
+      for (const key in worksheet) {
+        if (key[0] === '!') continue;
+        const colMatch = key.match(/[A-Z]+/);
+        const rowMatch = key.match(/\d+/);
+        if (!colMatch || !rowMatch) continue;
+
+        const col = colMatch[0];
+        const rowNum = parseInt(rowMatch[0], 10);
+        let style: any = worksheet[key].s || {};
+
+        if (['A', 'B', 'C', 'D'].includes(col)) {
+          style.alignment = { vertical: "center", horizontal: "center", wrapText: true };
+        }
+
+        if (rowNum > 1) {
+          const dataRow = rowData[rowNum - 2];
+          if (dataRow && typeof dataRow[3] === 'number' && dataRow[3] > 0 && dataRow[3] <= 3) {
+            style.fill = { fgColor: { rgb: "FFFFCCCC" } };
+          }
+        }
+
+        if (Object.keys(style).length > 0) {
+          worksheet[key].s = style;
+        }
+      }
+    };
+
+    const sectionToRows = new Map<string, any[][]>();
+    const allRows: any[][] = [];
+
+    const userMap = new Map<string, AdminUser>();
+    validUsers.forEach(u => userMap.set(u.email.toLowerCase(), u));
+
+    const addRow = (u: AdminUser, team: AdminTeam, role: string) => {
+      const row = [
+        team.name,
+        getTeamNumber(team.id),
+        team.claimedPs || "None",
+        team.members.length,
+        role,
+        u.name ?? "",
+        u.email,
+        u.phone ?? "",
+        u.regNo ?? "",
+        u.branch ?? "",
+        u.gender ?? "",
+        u.isComplete ? "Yes" : "No",
+        team.id
+      ];
+      allRows.push(row);
+      const sec = getSection(u.email);
+      if (!sectionToRows.has(sec)) sectionToRows.set(sec, []);
+      sectionToRows.get(sec)!.push(row);
+    };
+
+    validTeams.forEach(team => {
+      team.members.forEach(m => {
+        const u = userMap.get(m.email.toLowerCase());
+        if (u) {
+          const role = team.ownerEmail.toLowerCase() === u.email.toLowerCase() ? "Leader" : "Member";
+          addRow(u, team, role);
+        }
+      });
+    });
+
+    const wb = XLSX.utils.book_new();
+
+    allRows.sort((a, b) => String(a[12]).localeCompare(String(b[12])));
+
+    const masterWs = XLSX.utils.aoa_to_sheet([headers, ...allRows.map(r => r.slice(0, 12))]);
+    masterWs["!cols"] = colWidths;
+    applyStyles(masterWs, allRows);
+    const masterMerges: any[] = [];
+    let masterStartRow = 1;
+    let masterCurrentTeamId = allRows.length > 0 ? allRows[0][12] : null;
+
+    for (let i = 1; i <= allRows.length; i++) {
+      const teamId = i < allRows.length ? allRows[i][12] : null;
+      if (teamId !== masterCurrentTeamId) {
+        if (masterCurrentTeamId !== "None") {
+          const endRow = i;
+          if (endRow > masterStartRow) {
+            masterMerges.push({ s: { r: masterStartRow, c: 0 }, e: { r: endRow, c: 0 } });
+            masterMerges.push({ s: { r: masterStartRow, c: 1 }, e: { r: endRow, c: 1 } });
+            masterMerges.push({ s: { r: masterStartRow, c: 2 }, e: { r: endRow, c: 2 } });
+            masterMerges.push({ s: { r: masterStartRow, c: 3 }, e: { r: endRow, c: 3 } });
+          }
+        }
+        masterStartRow = i + 1;
+        masterCurrentTeamId = teamId;
+      }
+    }
+    if (masterMerges.length > 0) masterWs["!merges"] = masterMerges;
+    XLSX.utils.book_append_sheet(wb, masterWs, "All Data");
+
+    // 2. Create individual Section Sheets
+    const sections = Array.from(sectionToRows.keys()).sort();
+    sections.forEach((sec) => {
+      const rows = sectionToRows.get(sec)!;
+      rows.sort((a, b) => String(a[12]).localeCompare(String(b[12])));
+
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...rows.map(r => r.slice(0, 12))]);
+      ws["!cols"] = colWidths;
+      applyStyles(ws, rows);
+
+      const merges: any[] = [];
+      let startRow = 1;
+      let currentTeamId = rows.length > 0 ? rows[0][12] : null;
+
+      for (let i = 1; i <= rows.length; i++) {
+        const teamId = i < rows.length ? rows[i][12] : null;
+        if (teamId !== currentTeamId) {
+          if (currentTeamId !== "None") {
+            const endRow = i;
+            if (endRow > startRow) {
+              merges.push({ s: { r: startRow, c: 0 }, e: { r: endRow, c: 0 } });
+              merges.push({ s: { r: startRow, c: 1 }, e: { r: endRow, c: 1 } });
+              merges.push({ s: { r: startRow, c: 2 }, e: { r: endRow, c: 2 } });
+              merges.push({ s: { r: startRow, c: 3 }, e: { r: endRow, c: 3 } });
+            }
+          }
+          startRow = i + 1;
+          currentTeamId = teamId;
+        }
+      }
+
+      if (merges.length > 0) {
+        ws["!merges"] = merges;
+      }
+      XLSX.utils.book_append_sheet(wb, ws, sec === "OTHER" ? "OTHER" : `Section ${sec}`);
+    });
+
+    XLSX.writeFile(wb, "SIH_Complete_Final_Data.xlsx");
   }
 
   if (loading) {
@@ -386,13 +706,20 @@ export default function AdminDashboardPage() {
             <h1 className="text-xl sm:text-2xl font-bold">Admin Portal</h1>
             <p className="text-xs text-slate-500">Poornima SIH Directory & Compliance Supervision</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <button
-              onClick={exportCSV}
+              onClick={exportExcel}
               type="button"
-              className="w-full sm:w-auto border border-slate-300 hover:border-black text-xs font-semibold px-3 py-2 sm:py-1.5 bg-white text-slate-800 transition-colors text-center"
+              className="w-full sm:w-auto border border-emerald-600 hover:bg-emerald-50 text-xs font-semibold px-3 py-2 sm:py-1.5 bg-white text-emerald-700 transition-colors text-center shadow-sm"
             >
-              📥 Export CSV
+              📊 Export Filtered View
+            </button>
+            <button
+              onClick={exportCompleteExcel}
+              type="button"
+              className="w-full sm:w-auto border border-blue-600 hover:bg-blue-50 text-xs font-semibold px-3 py-2 sm:py-1.5 bg-white text-blue-700 transition-colors text-center shadow-sm"
+            >
+              📥 Download Complete Excel
             </button>
           </div>
         </div>

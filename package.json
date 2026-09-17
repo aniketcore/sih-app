@@ -9,7 +9,8 @@
     "react": "latest",
     "react-dom": "latest",
     "react-server-dom-webpack": "latest",
-    "vinext": "latest"
+    "vinext": "latest",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "latest",
