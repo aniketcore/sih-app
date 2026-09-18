@@ -18,7 +18,7 @@ function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
-export function TeamBoard({ user, isFrozen = false }: { user: User; isFrozen?: boolean }) {
+export function TeamBoard({ user, isFrozen = false, isFCFSEnabled = true }: { user: User; isFrozen?: boolean; isFCFSEnabled?: boolean }) {
   const [teamName, setTeamName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [teams, setTeams] = useState<Team[]>([]);
@@ -381,6 +381,10 @@ export function TeamBoard({ user, isFrozen = false }: { user: User; isFrozen?: b
                     </div>
                   );
                 })()
+              ) : !isFCFSEnabled ? (
+                <div className="border-b border-red-200 bg-red-50 p-4 text-sm text-red-900 font-bold text-center">
+                  ⚠️ PS claiming window has been closed and your team has been eliminated from SIH.
+                </div>
               ) : null}
 
               {/* SIH Female Member Warning Banner */}

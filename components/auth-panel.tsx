@@ -13,6 +13,7 @@ export function AuthPanel() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isFrozen, setIsFrozen] = useState(false);
+  const [isFCFSEnabled, setIsFCFSEnabled] = useState(false);
   const [isLeadersOnlyLogin, setIsLeadersOnlyLogin] = useState(false);
   const [isLeader, setIsLeader] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -25,6 +26,7 @@ export function AuthPanel() {
       const p = res.user;
       setProfile(p);
       setIsFrozen(res.isFrozen);
+      setIsFCFSEnabled(res.isFCFSEnabled);
       setIsLeadersOnlyLogin(res.isLeadersOnlyLogin);
       setIsLeader(res.isLeader);
     } catch (cause) {
@@ -139,7 +141,7 @@ export function AuthPanel() {
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       
       <div className={!isProfileComplete ? "pointer-events-none opacity-40 select-none" : ""}>
-        <TeamBoard user={user} isFrozen={isFrozen} />
+        <TeamBoard user={user} isFrozen={isFrozen} isFCFSEnabled={isFCFSEnabled} />
       </div>
     </div>
     </div>
