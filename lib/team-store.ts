@@ -11,6 +11,7 @@ export type Team = {
   id: string;
   name: string;
   ownerEmail: string;
+  claimedPs?: string | null;
   members: TeamMember[];
 };
 
@@ -57,6 +58,15 @@ export type TeamStore = {
 type Unsubscribe = () => void;
 
 const pollIntervalMs = 30000;
+
+export function getTeamNumber(id: string) {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = (hash << 5) - hash + id.charCodeAt(i);
+    hash |= 0;
+  }
+  return 1000 + (Math.abs(hash) % 9000);
+}
 
 async function getAuthToken() {
   const user = auth.currentUser;

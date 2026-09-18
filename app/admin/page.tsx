@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { subscribeAuth, type AuthUser } from "../../lib/auth";
-import { teamStore, type UserProfile, type Team } from "../../lib/team-store";
+import { teamStore, getTeamNumber, type UserProfile, type Team } from "../../lib/team-store";
 import { problemStatements } from "../../lib/problem-statements";
 import * as XLSX from "xlsx";
 
@@ -340,14 +340,7 @@ export default function AdminDashboardPage() {
     );
   }, [teams, search, teamSizeFilter, teamGenderFilter, teamPsFilter, problemStatements]);
 
-  function getTeamNumber(id: string) {
-    let hash = 0;
-    for (let i = 0; i < id.length; i++) {
-      hash = (hash << 5) - hash + id.charCodeAt(i);
-      hash |= 0;
-    }
-    return 1000 + (Math.abs(hash) % 9000);
-  }
+
 
   function exportExcel() {
     const emailToTeam = new Map<string, AdminTeam>();
@@ -398,10 +391,10 @@ export default function AdminDashboardPage() {
     const allRows: any[][] = [];
     const exportedEmails = new Set<string>();
 
-    const userMap = new Map<string, AdminUser>();
+    const userMap = new Map<string, UserProfile>();
     filteredUsers.forEach(u => userMap.set(u.email.toLowerCase(), u));
 
-    const addRow = (u: AdminUser, team: AdminTeam | null, role: string) => {
+    const addRow = (u: UserProfile, team: AdminTeam | null, role: string) => {
       const row = [
         team ? team.name : "None",
         team ? getTeamNumber(team.id) : "None",
@@ -577,10 +570,10 @@ export default function AdminDashboardPage() {
     const sectionToRows = new Map<string, any[][]>();
     const allRows: any[][] = [];
 
-    const userMap = new Map<string, AdminUser>();
+    const userMap = new Map<string, UserProfile>();
     validUsers.forEach(u => userMap.set(u.email.toLowerCase(), u));
 
-    const addRow = (u: AdminUser, team: AdminTeam, role: string) => {
+    const addRow = (u: UserProfile, team: AdminTeam, role: string) => {
       const row = [
         team.name,
         getTeamNumber(team.id),

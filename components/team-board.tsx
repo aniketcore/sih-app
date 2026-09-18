@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import type { User } from "firebase/auth";
-import { teamStore, type Invite, type Team } from "../lib/team-store";
+import { teamStore, getTeamNumber, type Invite, type Team } from "../lib/team-store";
+import { problemStatements } from "../lib/problem-statements";
 
 function getInitials(value: string) {
   return value
@@ -342,6 +343,9 @@ export function TeamBoard({ user, isFrozen = false }: { user: User; isFrozen?: b
                   ) : (
                     <div className="flex items-center gap-2">
                       <h3 className="text-base font-bold text-slate-900">{primaryTeam.name}</h3>
+                      <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 uppercase tracking-wider">
+                        Team #{getTeamNumber(primaryTeam.id)}
+                      </span>
                       {isLeader && (
                         <button
                           type="button"
@@ -363,6 +367,21 @@ export function TeamBoard({ user, isFrozen = false }: { user: User; isFrozen?: b
                   {primaryTeam.members.length} / 6 Members
                 </span>
               </div>
+
+              {primaryTeam.claimedPs ? (
+                (() => {
+                  const ps = problemStatements.find(p => p.ps_number === primaryTeam.claimedPs);
+                  return (
+                    <div className="border-b border-slate-200 bg-emerald-50 p-3 text-xs text-emerald-900 space-y-1">
+                      <div className="flex justify-between items-center font-bold">
+                        <span>Locked Problem Statement: {primaryTeam.claimedPs}</span>
+                        {ps?.category && <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded">{ps.category}</span>}
+                      </div>
+                      <p className="opacity-90">{ps?.title}</p>
+                    </div>
+                  );
+                })()
+              ) : null}
 
               {/* SIH Female Member Warning Banner */}
               {!primaryTeam.members.some((m) => m.gender?.toLowerCase() === "female") ? (

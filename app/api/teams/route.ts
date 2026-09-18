@@ -27,13 +27,15 @@ export async function GET(request: NextRequest) {
     const result = await env.sih_app_db
       .prepare(
         `
-          SELECT t.id, t.name, t.owner_email, t.created_at
+          SELECT t.id, t.name, t.owner_email, t.created_at,
+                 (SELECT resource_id FROM fcfs_claims WHERE user_id = t.owner_uid LIMIT 1) as claimed_ps
           FROM teams t
           WHERE t.owner_uid = ?
 
           UNION
 
-          SELECT t.id, t.name, t.owner_email, t.created_at
+          SELECT t.id, t.name, t.owner_email, t.created_at,
+                 (SELECT resource_id FROM fcfs_claims WHERE user_id = t.owner_uid LIMIT 1) as claimed_ps
           FROM team_members tm
           JOIN teams t ON t.id = tm.team_id
           WHERE tm.user_id = ?
@@ -41,7 +43,7 @@ export async function GET(request: NextRequest) {
         `,
       )
       .bind(userId, userId)
-      .all<{ id: string; name: string; owner_email: string; created_at: number }>();
+      .all<{ id: string; name: string; owner_email: string; created_at: number; claimed_ps: string | null }>();
 
     const teams = [];
     for (const teamRow of result.results) {
@@ -60,6 +62,7 @@ export async function GET(request: NextRequest) {
         id: teamRow.id,
         name: teamRow.name,
         ownerEmail: teamRow.owner_email,
+        claimedPs: teamRow.claimed_ps,
         members: membersResult.results.map((m) => ({
           email: m.email,
           photoUrl: m.photo_url ?? undefined,
